@@ -74,7 +74,7 @@ interface FareSettings {
 interface AuditLog {
   id: string;
   action: string;
-  action_type: "admin" | "fare" | "driver" | "user" | "system";
+  action_type: "admin" | "fare" | "driver" | "user" | "system" | string;
   performed_by: string;
   target: string;
   details: string;
@@ -92,89 +92,9 @@ interface Stats {
   revenue: number;
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
+// Data helpers
 
-const MOCK_STATS: Stats = {
-  passengers: 1247,
-  drivers: 89,
-  admins: 5,
-  bookings: 3821,
-  pending_drivers: 12,
-  completed: 3245,
-  cancelled: 276,
-  revenue: 487650,
-};
-
-const MOCK_ADMINS: Profile[] = [
-  { id: "1", email: "ramos.admin@arangkada.ph", full_name: "Ricardo Ramos", role: "admin", status: "active", phone: "+63 912 345 6789", created_at: "2024-01-15", last_login: "2025-06-17" },
-  { id: "2", email: "dela.cruz@arangkada.ph", full_name: "Maria Dela Cruz", role: "admin", status: "active", phone: "+63 917 234 5678", created_at: "2024-02-20", last_login: "2025-06-16" },
-  { id: "3", email: "santos.admin@arangkada.ph", full_name: "Jose Santos", role: "admin", status: "inactive", phone: "+63 918 345 6790", created_at: "2024-03-10", last_login: "2025-05-20" },
-  { id: "4", email: "reyes.admin@arangkada.ph", full_name: "Ana Reyes", role: "admin", status: "active", phone: "+63 919 456 7891", created_at: "2024-04-05", last_login: "2025-06-15" },
-  { id: "5", email: "garcia.admin@arangkada.ph", full_name: "Carlos Garcia", role: "admin", status: "active", phone: "+63 920 567 8902", created_at: "2024-05-12", last_login: "2025-06-17" },
-];
-
-const MOCK_PASSENGERS: Profile[] = [
-  { id: "p1", email: "juan@gmail.com", full_name: "Juan dela Cruz", role: "passenger", status: "active", phone: "+63 912 111 2222", created_at: "2024-06-01" },
-  { id: "p2", email: "maria.reyes@gmail.com", full_name: "Maria Reyes", role: "passenger", status: "active", phone: "+63 917 222 3333", created_at: "2024-06-15" },
-  { id: "p3", email: "pedro@yahoo.com", full_name: "Pedro Santos", role: "passenger", status: "suspended", phone: "+63 918 333 4444", created_at: "2024-07-02" },
-  { id: "p4", email: "ana.garcia@gmail.com", full_name: "Ana Garcia", role: "passenger", status: "active", phone: "+63 919 444 5555", created_at: "2024-07-10" },
-  { id: "p5", email: "carlo.m@outlook.com", full_name: "Carlo Mendoza", role: "passenger", status: "active", phone: "+63 920 555 6666", created_at: "2024-08-01" },
-  { id: "p6", email: "liza.t@gmail.com", full_name: "Liza Torres", role: "passenger", status: "active", phone: "+63 921 666 7777", created_at: "2024-08-22" },
-];
-
-const MOCK_DRIVERS: Profile[] = [
-  { id: "d1", email: "manny.p@gmail.com", full_name: "Manny Pacquiao Jr.", role: "driver", status: "active", phone: "+63 912 777 8888", created_at: "2024-03-05" },
-  { id: "d2", email: "bong.c@gmail.com", full_name: "Bong Castillo", role: "driver", status: "active", phone: "+63 917 888 9999", created_at: "2024-04-12" },
-  { id: "d3", email: "ryan.v@yahoo.com", full_name: "Ryan Villanueva", role: "driver", status: "suspended", phone: "+63 918 999 0000", created_at: "2024-05-20" },
-  { id: "d4", email: "tony.l@gmail.com", full_name: "Tony Lim", role: "driver", status: "active", phone: "+63 919 000 1111", created_at: "2024-06-03" },
-];
-
-const MOCK_DRIVER_APPS: DriverApp[] = [
-  { id: "da1", driver_id: "da1", name: "Eduardo Fernandez", email: "eduardo.f@gmail.com", phone: "+63 912 123 4567", license_number: "N01-23-456789", vehicle_make: "Toyota", vehicle_model: "Vios", vehicle_year: "2021", vehicle_plate: "ABC 1234", status: "pending", applied_at: "2025-06-10" },
-  { id: "da2", driver_id: "da2", name: "Rosario Magno", email: "rosario.m@yahoo.com", phone: "+63 917 234 5678", license_number: "N02-23-567890", vehicle_make: "Honda", vehicle_model: "City", vehicle_year: "2022", vehicle_plate: "DEF 5678", status: "pending", applied_at: "2025-06-12" },
-  { id: "da3", driver_id: "da3", name: "Bernardo Cruz", email: "bernardo.c@gmail.com", phone: "+63 918 345 6789", license_number: "N03-22-678901", vehicle_make: "Mitsubishi", vehicle_model: "Mirage", vehicle_year: "2020", vehicle_plate: "GHI 9012", status: "pending", applied_at: "2025-06-14" },
-  { id: "da4", driver_id: "da4", name: "Ligaya Reyes", email: "ligaya.r@gmail.com", phone: "+63 919 456 7890", license_number: "N04-23-789012", vehicle_make: "Suzuki", vehicle_model: "Celerio", vehicle_year: "2021", vehicle_plate: "JKL 3456", status: "approved", applied_at: "2025-06-01", reviewed_at: "2025-06-05", reviewed_by: "Maria Dela Cruz" },
-  { id: "da5", driver_id: "da5", name: "Arturo Bautista", email: "arturo.b@gmail.com", phone: "+63 920 567 8901", license_number: "N05-21-890123", vehicle_make: "Toyota", vehicle_model: "Wigo", vehicle_year: "2019", vehicle_plate: "MNO 7890", status: "rejected", applied_at: "2025-05-28", reviewed_at: "2025-06-02", reviewed_by: "Ricardo Ramos" },
-  { id: "da6", driver_id: "da6", name: "Cristina Aquino", email: "cristina.a@outlook.com", phone: "+63 921 678 9012", license_number: "N06-23-901234", vehicle_make: "Kia", vehicle_model: "Picanto", vehicle_year: "2022", vehicle_plate: "PQR 1234", status: "pending", applied_at: "2025-06-15" },
-  { id: "da7", driver_id: "da7", name: "Fernando Ocampo", email: "fernando.o@gmail.com", phone: "+63 922 789 0123", license_number: "N07-22-012345", vehicle_make: "Hyundai", vehicle_model: "Eon", vehicle_year: "2020", vehicle_plate: "STU 5678", status: "pending", applied_at: "2025-06-16" },
-];
-
-const MOCK_BOOKINGS: Booking[] = [
-  { id: "b1", booking_ref: "ARK-240001", passenger_name: "Juan dela Cruz", driver_name: "Manny Pacquiao Jr.", pickup: "SM Mall of Asia, Pasay", dropoff: "Bonifacio Global City, Taguig", fare: 185, status: "completed", ride_type: "solo", passengers_count: 1, created_at: "2025-06-17 14:32" },
-  { id: "b2", booking_ref: "ARK-240002", passenger_name: "Maria Reyes", driver_name: "Bong Castillo", pickup: "Quezon City Hall", dropoff: "Eastwood City, Quezon City", fare: 120, status: "completed", ride_type: "solo", passengers_count: 1, created_at: "2025-06-17 13:15" },
-  { id: "b3", booking_ref: "ARK-240003", passenger_name: "Ana Garcia", driver_name: "Tony Lim", pickup: "Robinsons Galleria, Ortigas", dropoff: "Manila Cathedral, Intramuros", fare: 340, status: "in_progress", ride_type: "group", passengers_count: 3, created_at: "2025-06-17 15:45" },
-  { id: "b4", booking_ref: "ARK-240004", passenger_name: "Carlo Mendoza", driver_name: "Manny Pacquiao Jr.", pickup: "Makati Medical Center", dropoff: "NAIA Terminal 3, Pasay", fare: 410, status: "completed", ride_type: "solo", passengers_count: 1, created_at: "2025-06-16 08:22" },
-  { id: "b5", booking_ref: "ARK-240005", passenger_name: "Liza Torres", driver_name: "Bong Castillo", pickup: "University of Santo Tomas", dropoff: "Divisoria, Manila", fare: 95, status: "cancelled", ride_type: "solo", passengers_count: 1, created_at: "2025-06-16 11:00" },
-  { id: "b6", booking_ref: "ARK-240006", passenger_name: "Pedro Santos", driver_name: "Tony Lim", pickup: "SM Fairview, Quezon City", dropoff: "Trinoma Mall, Quezon City", fare: 75, status: "completed", ride_type: "solo", passengers_count: 1, created_at: "2025-06-15 16:30" },
-  { id: "b7", booking_ref: "ARK-240007", passenger_name: "Ana Garcia", driver_name: "Manny Pacquiao Jr.", pickup: "EDSA MRT Taft Station", dropoff: "Pasay City Hall", fare: 60, status: "completed", ride_type: "solo", passengers_count: 1, created_at: "2025-06-15 09:45" },
-  { id: "b8", booking_ref: "ARK-240008", passenger_name: "Juan dela Cruz", driver_name: "Bong Castillo", pickup: "Ortigas Center", dropoff: "San Juan Medical Center", fare: 155, status: "cancelled", ride_type: "group", passengers_count: 2, created_at: "2025-06-14 14:00" },
-];
-
-const MOCK_FARES: FareSettings = {
-  solo_base_fare: 35,
-  solo_per_km: 10,
-  solo_min_fare: 45,
-  group_base_fare: 25,
-  group_per_km: 8,
-  group_min_fare: 35,
-  group_max_passengers: 4,
-  surge_multiplier: 1.5,
-  updated_at: "2025-06-10 09:00",
-  updated_by: "Super Admin",
-};
-
-const MOCK_AUDIT: AuditLog[] = [
-  { id: "al1", action: "Admin Account Created", action_type: "admin", performed_by: "Super Admin", target: "Carlos Garcia (carlos.garcia@arangkada.ph)", details: "New admin account created with role: admin", created_at: "2025-06-17 10:30" },
-  { id: "al2", action: "Driver Application Approved", action_type: "driver", performed_by: "Maria Dela Cruz", target: "Ligaya Reyes (ARK-DRV-004)", details: "Driver application approved after document verification", created_at: "2025-06-17 09:15" },
-  { id: "al3", action: "Fare Settings Updated", action_type: "fare", performed_by: "Super Admin", target: "Solo Ride Fares", details: "Base fare changed from ₱30 to ₱35, per km from ₱9 to ₱10", created_at: "2025-06-16 14:22" },
-  { id: "al4", action: "User Account Suspended", action_type: "user", performed_by: "Ricardo Ramos", target: "Pedro Santos (pedro@yahoo.com)", details: "Account suspended for violation of terms of service", created_at: "2025-06-15 11:45" },
-  { id: "al5", action: "Driver Application Rejected", action_type: "driver", performed_by: "Ricardo Ramos", target: "Arturo Bautista (ARK-DRV-005)", details: "Application rejected: incomplete documents, expired license", created_at: "2025-06-15 10:00" },
-  { id: "al6", action: "System Maintenance Mode Enabled", action_type: "system", performed_by: "Super Admin", target: "System", details: "Maintenance mode enabled for database migration", created_at: "2025-06-14 02:00" },
-  { id: "al7", action: "Admin Account Deactivated", action_type: "admin", performed_by: "Super Admin", target: "Jose Santos (santos.admin@arangkada.ph)", details: "Admin account deactivated due to inactivity", created_at: "2025-06-12 16:30" },
-  { id: "al8", action: "Group Fare Settings Updated", action_type: "fare", performed_by: "Super Admin", target: "Group Ride Fares", details: "Max passengers changed from 3 to 4", created_at: "2025-06-10 09:00" },
-];
-
-// ─── Utility Components ───────────────────────────────────────────────────────
+// Utility Components ───────────────────────────────────────────────────────
 
 function Badge({ children, variant = "default" }: { children: React.ReactNode; variant?: "default" | "success" | "warning" | "danger" | "info" | "muted" }) {
   const variants = {
@@ -303,6 +223,241 @@ function EmptyState({ message }: { message: string }) {
       <p className="text-sm">{message}</p>
     </div>
   );
+}
+
+function LoadingState({ message = "Loading data..." }: { message?: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground text-sm">
+      <Loader2 size={15} className="animate-spin text-[#C9952A]" />
+      {message}
+    </div>
+  );
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <AlertCircle size={34} className="text-red-400 opacity-80" />
+      <p className="text-sm text-red-400">{message}</p>
+      {onRetry && (
+        <GoldButton variant="outline" onClick={onRetry} className="text-xs py-1.5">
+          <RefreshCw size={13} />
+          Retry
+        </GoldButton>
+      )}
+    </div>
+  );
+}
+
+type DbRow = Record<string, unknown>;
+type DataState<T> = { data: T; loading: boolean; error: string; reload: () => Promise<void> };
+
+const blankStats: Stats = {
+  passengers: 0,
+  drivers: 0,
+  admins: 0,
+  bookings: 0,
+  pending_drivers: 0,
+  completed: 0,
+  cancelled: 0,
+  revenue: 0,
+};
+
+const blankFares: FareSettings = {
+  solo_base_fare: 0,
+  solo_per_km: 0,
+  solo_min_fare: 0,
+  group_base_fare: 0,
+  group_per_km: 0,
+  group_min_fare: 0,
+  group_max_passengers: 0,
+  surge_multiplier: 1,
+  updated_at: "",
+  updated_by: "",
+};
+
+const textValue = (row: DbRow, keys: string[], fallback = "") =>
+  keys.map((key) => row[key]).find((value) => value !== undefined && value !== null && value !== "")?.toString() ?? fallback;
+
+const numberValue = (row: DbRow, keys: string[], fallback = 0) => {
+  const value = keys.map((key) => row[key]).find((item) => item !== undefined && item !== null && item !== "");
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const dateValue = (row: DbRow, keys: string[]) => textValue(row, keys, "—");
+const timeMs = (value: string) => {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const mapProfile = (row: DbRow): Profile => ({
+  id: textValue(row, ["id", "user_id", "profile_id"], crypto.randomUUID()),
+  email: textValue(row, ["email", "email_address"]),
+  full_name: textValue(row, ["full_name", "name", "display_name", "first_name"], "Unnamed user"),
+  role: textValue(row, ["role", "user_role"], "user"),
+  status: textValue(row, ["status", "account_status"], "active"),
+  phone: textValue(row, ["phone", "phone_number", "mobile_number"], ""),
+  created_at: dateValue(row, ["created_at", "joined_at", "inserted_at"]),
+  last_login: textValue(row, ["last_login", "last_sign_in_at"], ""),
+});
+
+const mapDriver = (row: DbRow): DriverApp => ({
+  id: textValue(row, ["id", "driver_id"], crypto.randomUUID()),
+  driver_id: textValue(row, ["driver_id", "profile_id", "user_id", "id"]),
+  name: textValue(row, ["full_name", "name", "driver_name"], "Unnamed driver"),
+  email: textValue(row, ["email", "email_address"]),
+  phone: textValue(row, ["phone", "phone_number", "mobile_number"]),
+  license_number: textValue(row, ["license_number", "driver_license", "license_no"]),
+  vehicle_make: textValue(row, ["vehicle_make", "make"]),
+  vehicle_model: textValue(row, ["vehicle_model", "model"]),
+  vehicle_year: textValue(row, ["vehicle_year", "year"]),
+  vehicle_plate: textValue(row, ["vehicle_plate", "plate_number", "vehicle_plate_number"]),
+  status: textValue(row, ["status", "application_status"], "pending") as DriverApp["status"],
+  applied_at: dateValue(row, ["applied_at", "created_at", "submitted_at"]),
+  reviewed_at: textValue(row, ["reviewed_at", "updated_at"]),
+  reviewed_by: textValue(row, ["reviewed_by", "approved_by"]),
+});
+
+const mapBooking = (row: DbRow): Booking => ({
+  id: textValue(row, ["id", "booking_id"], crypto.randomUUID()),
+  booking_ref: textValue(row, ["booking_ref", "reference_no", "reference", "id"]),
+  passenger_name: textValue(row, ["passenger_name", "customer_name", "rider_name"], "Passenger"),
+  driver_name: textValue(row, ["driver_name"], "Unassigned"),
+  pickup: textValue(row, ["pickup", "pickup_address", "origin", "pickup_location"]),
+  dropoff: textValue(row, ["dropoff", "dropoff_address", "destination", "dropoff_location"]),
+  fare: numberValue(row, ["fare", "total_fare", "amount", "price"]),
+  status: textValue(row, ["status", "booking_status"], "pending") as Booking["status"],
+  ride_type: textValue(row, ["ride_type", "type", "booking_type"], "solo") as Booking["ride_type"],
+  passengers_count: numberValue(row, ["passengers_count", "passenger_count", "seats"], 1),
+  created_at: dateValue(row, ["created_at", "booked_at", "requested_at"]),
+});
+
+const mapFareSettings = (row?: DbRow): FareSettings => row ? ({
+  solo_base_fare: numberValue(row, ["solo_base_fare", "base_fare"]),
+  solo_per_km: numberValue(row, ["solo_per_km", "per_km_rate"]),
+  solo_min_fare: numberValue(row, ["solo_min_fare", "minimum_fare"]),
+  group_base_fare: numberValue(row, ["group_base_fare"]),
+  group_per_km: numberValue(row, ["group_per_km"]),
+  group_min_fare: numberValue(row, ["group_min_fare"]),
+  group_max_passengers: numberValue(row, ["group_max_passengers", "max_passengers"]),
+  surge_multiplier: numberValue(row, ["surge_multiplier"], 1),
+  updated_at: dateValue(row, ["updated_at", "created_at"]),
+  updated_by: textValue(row, ["updated_by"], "System"),
+}) : blankFares;
+
+const mapAuditLog = (row: DbRow): AuditLog => ({
+  id: textValue(row, ["id", "audit_id"], crypto.randomUUID()),
+  action: textValue(row, ["action", "event", "title"], "System event"),
+  action_type: textValue(row, ["action_type", "type", "category"], "system"),
+  performed_by: textValue(row, ["performed_by", "actor_name", "admin_name"], "System"),
+  target: textValue(row, ["target", "target_name", "resource"], "—"),
+  details: textValue(row, ["details", "description", "message"], ""),
+  created_at: dateValue(row, ["created_at", "logged_at"]),
+});
+
+function useRealtimeRows<T extends { created_at?: string }>(table: string, mapper: (row: DbRow) => T): DataState<T[]> {
+  const [data, setData] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const reload = useCallback(async () => {
+    if (isDemoMode) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const { data: rows, error: queryError } = await supabase.from(table).select("*");
+    if (queryError) {
+      setError(queryError.message);
+    } else {
+      setData(((rows ?? []) as DbRow[]).map(mapper).sort((a, b) => timeMs(b.created_at ?? "") - timeMs(a.created_at ?? "")));
+    }
+    setLoading(false);
+  }, [mapper, table]);
+
+  useEffect(() => {
+    reload();
+    if (isDemoMode) return undefined;
+    const channel = supabase
+      .channel(`super-admin-${table}`)
+      .on("postgres_changes", { event: "*", schema: "public", table }, () => reload())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [reload, table]);
+
+  return { data, loading, error, reload };
+}
+
+function useDashboardData(): DataState<{ stats: Stats; bookings: Booking[]; auditLogs: AuditLog[] }> {
+  const [data, setData] = useState({ stats: blankStats, bookings: [] as Booking[], auditLogs: [] as AuditLog[] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const reload = useCallback(async () => {
+    if (isDemoMode) {
+      setData({ stats: blankStats, bookings: [], auditLogs: [] });
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const [profilesRes, driversRes, bookingsRes, auditRes] = await Promise.all([
+      supabase.from("profiles").select("*"),
+      supabase.from("drivers").select("*"),
+      supabase.from("bookings").select("*"),
+      supabase.from("audit_logs").select("*"),
+    ]);
+
+    const firstError = profilesRes.error || driversRes.error || bookingsRes.error || auditRes.error;
+    if (firstError) {
+      setError(firstError.message);
+      setLoading(false);
+      return;
+    }
+
+    const profiles = ((profilesRes.data ?? []) as DbRow[]).map(mapProfile);
+    const drivers = ((driversRes.data ?? []) as DbRow[]).map(mapDriver);
+    const bookings = ((bookingsRes.data ?? []) as DbRow[]).map(mapBooking).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at));
+    const auditLogs = ((auditRes.data ?? []) as DbRow[]).map(mapAuditLog).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at)).slice(0, 5);
+
+    setData({
+      stats: {
+        passengers: profiles.filter((p) => p.role === "passenger").length,
+        drivers: drivers.filter((d) => d.status === "approved" || d.status === "active").length,
+        admins: profiles.filter((p) => p.role === "admin" || p.role === "super_admin").length,
+        bookings: bookings.length,
+        pending_drivers: drivers.filter((d) => d.status === "pending").length,
+        completed: bookings.filter((b) => b.status === "completed").length,
+        cancelled: bookings.filter((b) => b.status === "cancelled").length,
+        revenue: bookings.filter((b) => b.status === "completed").reduce((sum, b) => sum + b.fare, 0),
+      },
+      bookings: bookings.slice(0, 5),
+      auditLogs,
+    });
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    reload();
+    if (isDemoMode) return undefined;
+    const tables = ["profiles", "drivers", "bookings", "audit_logs"];
+    const channels = tables.map((table) =>
+      supabase
+        .channel(`super-admin-dashboard-${table}`)
+        .on("postgres_changes", { event: "*", schema: "public", table }, () => reload())
+        .subscribe()
+    );
+    return () => {
+      channels.forEach((channel) => supabase.removeChannel(channel));
+    };
+  }, [reload]);
+
+  return { data, loading, error, reload };
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
@@ -564,7 +719,13 @@ function UnauthorizedPage({ onBack }: { onBack: () => void }) {
 
 // ─── Dashboard Page ───────────────────────────────────────────────────────────
 
-function DashboardPage({ stats }: { stats: Stats }) {
+function DashboardPage() {
+  const { data, loading, error, reload } = useDashboardData();
+  const { stats, bookings, auditLogs } = data;
+
+  if (loading) return <LoadingState message="Loading dashboard..." />;
+  if (error) return <ErrorState message={error} onRetry={reload} />;
+
   return (
     <div className="space-y-6">
       {/* Stats grid */}
@@ -587,7 +748,9 @@ function DashboardPage({ stats }: { stats: Stats }) {
             <Badge>Live</Badge>
           </div>
           <div className="divide-y divide-border">
-            {MOCK_BOOKINGS.slice(0, 5).map((b) => (
+            {bookings.length === 0 ? (
+              <EmptyState message="No recent bookings yet" />
+            ) : bookings.map((b) => (
               <div key={b.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/2 transition-colors">
                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${b.status === "completed" ? "bg-emerald-400" : b.status === "cancelled" ? "bg-red-400" : "bg-amber-400"}`} />
                 <div className="flex-1 min-w-0">
@@ -610,7 +773,9 @@ function DashboardPage({ stats }: { stats: Stats }) {
             <Badge variant="muted">Recent</Badge>
           </div>
           <div className="divide-y divide-border">
-            {MOCK_AUDIT.slice(0, 5).map((log) => {
+            {auditLogs.length === 0 ? (
+              <EmptyState message="No audit logs yet" />
+            ) : auditLogs.map((log) => {
               const colors: Record<string, string> = { admin: "text-[#C9952A]", fare: "text-blue-400", driver: "text-emerald-400", user: "text-amber-400", system: "text-purple-400" };
               return (
                 <div key={log.id} className="px-4 py-3 hover:bg-white/2 transition-colors">
@@ -635,7 +800,7 @@ function DashboardPage({ stats }: { stats: Stats }) {
 // ─── Admin Management Page ────────────────────────────────────────────────────
 
 function AdminManagementPage() {
-  const [admins, setAdmins] = useState(MOCK_ADMINS);
+  const { data: profiles, loading, error, reload } = useRealtimeRows("profiles", mapProfile);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState<Profile | null>(null);
@@ -643,29 +808,42 @@ function AdminManagementPage() {
   const [toast, setToast] = useState("");
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+  const admins = profiles.filter((a) => a.role === "admin" || a.role === "super_admin");
 
   const filtered = admins.filter((a) =>
     a.full_name.toLowerCase().includes(search.toLowerCase()) ||
     a.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const toggleStatus = (id: string) => {
-    setAdmins((prev) => prev.map((a) => a.id === id ? { ...a, status: a.status === "active" ? "inactive" : "active" } : a));
-    notify("Admin status updated.");
+  const toggleStatus = async (admin: Profile) => {
+    const nextStatus = admin.status === "active" ? "inactive" : "active";
+    const { error: updateError } = await supabase.from("profiles").update({ status: nextStatus }).eq("id", admin.id);
+    if (updateError) notify(updateError.message);
+    else notify("Admin status updated.");
   };
 
-  const deleteAdmin = (id: string) => {
-    setAdmins((prev) => prev.filter((a) => a.id !== id));
-    notify("Admin account deleted.");
+  const deleteAdmin = async (id: string) => {
+    const { error: deleteError } = await supabase.from("profiles").delete().eq("id", id);
+    if (deleteError) notify(deleteError.message);
+    else notify("Admin profile deleted.");
   };
 
-  const createAdmin = () => {
+  const createAdmin = async () => {
     if (!newAdmin.email || !newAdmin.full_name) return;
-    const a: Profile = { id: Date.now().toString(), ...newAdmin, role: "admin", status: "active", created_at: new Date().toISOString().split("T")[0] };
-    setAdmins((prev) => [a, ...prev]);
+    const { error: insertError } = await supabase.from("profiles").insert({
+      email: newAdmin.email,
+      full_name: newAdmin.full_name,
+      phone: newAdmin.phone,
+      role: "admin",
+      status: "active",
+    });
+    if (insertError) {
+      notify(insertError.message);
+      return;
+    }
     setNewAdmin({ email: "", full_name: "", phone: "", password: "" });
     setShowCreate(false);
-    notify("Admin account created successfully.");
+    notify("Admin profile created successfully.");
   };
 
   return (
@@ -698,7 +876,11 @@ function AdminManagementPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={7}><LoadingState message="Loading admins..." /></td></tr>
+              ) : error ? (
+                <tr><td colSpan={7}><ErrorState message={error} onRetry={reload} /></td></tr>
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={7}><EmptyState message="No admins found" /></td></tr>
               ) : filtered.map((a) => (
                 <tr key={a.id} className="hover:bg-white/2 transition-colors">
@@ -722,7 +904,7 @@ function AdminManagementPage() {
                       <button onClick={() => setShowEdit(a)} className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                         <Edit2 size={14} />
                       </button>
-                      <button onClick={() => toggleStatus(a.id)} className={`p-1.5 rounded hover:bg-white/5 transition-colors ${a.status === "active" ? "text-amber-400 hover:text-amber-300" : "text-emerald-400 hover:text-emerald-300"}`} title={a.status === "active" ? "Deactivate" : "Activate"}>
+                      <button onClick={() => toggleStatus(a)} className={`p-1.5 rounded hover:bg-white/5 transition-colors ${a.status === "active" ? "text-amber-400 hover:text-amber-300" : "text-emerald-400 hover:text-emerald-300"}`} title={a.status === "active" ? "Deactivate" : "Activate"}>
                         {a.status === "active" ? <Ban size={14} /> : <UserCheck size={14} />}
                       </button>
                       <button onClick={() => deleteAdmin(a.id)} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
@@ -772,10 +954,11 @@ function AdminManagementPage() {
 // ─── User Management Page ─────────────────────────────────────────────────────
 
 function UserManagementPage() {
+  const { data: profiles, loading, error, reload } = useRealtimeRows("profiles", mapProfile);
   const [tab, setTab] = useState<"passengers" | "drivers">("passengers");
   const [search, setSearch] = useState("");
 
-  const data = tab === "passengers" ? MOCK_PASSENGERS : MOCK_DRIVERS;
+  const data = profiles.filter((profile) => profile.role === (tab === "passengers" ? "passenger" : "driver"));
   const filtered = data.filter((u) =>
     u.full_name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase())
@@ -811,7 +994,11 @@ function UserManagementPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={7}><LoadingState message={`Loading ${tab}...`} /></td></tr>
+              ) : error ? (
+                <tr><td colSpan={7}><ErrorState message={error} onRetry={reload} /></td></tr>
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={7}><EmptyState message={`No ${tab} found`} /></td></tr>
               ) : filtered.map((u) => (
                 <tr key={u.id} className="hover:bg-white/2 transition-colors">
@@ -847,7 +1034,7 @@ function UserManagementPage() {
 // ─── Driver Applications Page ─────────────────────────────────────────────────
 
 function DriverApplicationsPage() {
-  const [apps, setApps] = useState(MOCK_DRIVER_APPS);
+  const { data: apps, loading, error, reload } = useRealtimeRows("drivers", mapDriver);
   const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<DriverApp | null>(null);
@@ -855,8 +1042,15 @@ function DriverApplicationsPage() {
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
-  const review = (id: string, status: "approved" | "rejected") => {
-    setApps((prev) => prev.map((a) => a.id === id ? { ...a, status, reviewed_at: new Date().toISOString(), reviewed_by: "Super Admin" } : a));
+  const review = async (id: string, status: "approved" | "rejected") => {
+    const { error: updateError } = await supabase
+      .from("drivers")
+      .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: "Super Admin" })
+      .eq("id", id);
+    if (updateError) {
+      notify(updateError.message);
+      return;
+    }
     setSelected(null);
     notify(`Application ${status}.`);
   };
@@ -897,7 +1091,11 @@ function DriverApplicationsPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="bg-card border border-border rounded-lg"><LoadingState message="Loading driver applications..." /></div>
+      ) : error ? (
+        <div className="bg-card border border-border rounded-lg"><ErrorState message={error} onRetry={reload} /></div>
+      ) : filtered.length === 0 ? (
         <div className="bg-card border border-border rounded-lg"><EmptyState message={`No ${tab} applications`} /></div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -973,11 +1171,12 @@ function DriverApplicationsPage() {
 // ─── Booking Records Page ─────────────────────────────────────────────────────
 
 function BookingRecordsPage() {
+  const { data: bookings, loading, error, reload } = useRealtimeRows("bookings", mapBooking);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  const filtered = MOCK_BOOKINGS.filter((b) => {
+  const filtered = bookings.filter((b) => {
     const matchSearch = b.passenger_name.toLowerCase().includes(search.toLowerCase()) ||
       b.driver_name.toLowerCase().includes(search.toLowerCase()) ||
       b.booking_ref.toLowerCase().includes(search.toLowerCase());
@@ -1020,7 +1219,7 @@ function BookingRecordsPage() {
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <p className="text-sm text-muted-foreground"><span className="text-foreground font-medium">{filtered.length}</span> records</p>
-          <GoldButton variant="outline" className="text-xs py-1.5"><RefreshCw size={13} />Refresh</GoldButton>
+          <GoldButton variant="outline" className="text-xs py-1.5" onClick={reload}><RefreshCw size={13} />Refresh</GoldButton>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -1032,7 +1231,11 @@ function BookingRecordsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={9}><LoadingState message="Loading bookings..." /></td></tr>
+              ) : error ? (
+                <tr><td colSpan={9}><ErrorState message={error} onRetry={reload} /></td></tr>
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={9}><EmptyState message="No bookings found" /></td></tr>
               ) : filtered.map((b) => (
                 <tr key={b.id} className="hover:bg-white/2 transition-colors">
@@ -1058,16 +1261,57 @@ function BookingRecordsPage() {
 // ─── Fare Settings Page ───────────────────────────────────────────────────────
 
 function FareSettingsPage() {
-  const [fares, setFares] = useState(MOCK_FARES);
+  const [fareId, setFareId] = useState<string | null>(null);
+  const [fares, setFares] = useState(blankFares);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+
+  const loadFares = useCallback(async () => {
+    if (isDemoMode) {
+      setFares(blankFares);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const { data, error: queryError } = await supabase.from("fare_settings").select("*");
+    if (queryError) setError(queryError.message);
+    else {
+      const latest = ((data ?? []) as DbRow[]).sort((a, b) => timeMs(textValue(b, ["updated_at", "created_at"])) - timeMs(textValue(a, ["updated_at", "created_at"])))[0];
+      setFareId(latest ? textValue(latest, ["id"]) : null);
+      setFares(mapFareSettings(latest));
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadFares();
+    if (isDemoMode) return undefined;
+    const channel = supabase
+      .channel("super-admin-fare-settings")
+      .on("postgres_changes", { event: "*", schema: "public", table: "fare_settings" }, () => loadFares())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadFares]);
 
   const update = (key: keyof FareSettings, value: string) => {
     setFares((prev) => ({ ...prev, [key]: parseFloat(value) || 0 }));
     setSaved(false);
   };
 
-  const save = () => {
-    setFares((prev) => ({ ...prev, updated_at: new Date().toLocaleString(), updated_by: "Super Admin" }));
+  const save = async () => {
+    const payload = { ...fares, updated_at: new Date().toISOString(), updated_by: "Super Admin" };
+    const { error: saveError } = fareId
+      ? await supabase.from("fare_settings").update(payload).eq("id", fareId)
+      : await supabase.from("fare_settings").insert(payload);
+    if (saveError) {
+      setError(saveError.message);
+      return;
+    }
+    setFares(payload);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -1092,6 +1336,8 @@ function FareSettingsPage() {
 
   return (
     <div className="space-y-5 max-w-3xl">
+      {loading && <div className="bg-card border border-border rounded-lg"><LoadingState message="Loading fare settings..." /></div>}
+      {error && <div className="bg-card border border-border rounded-lg"><ErrorState message={error} onRetry={loadFares} /></div>}
       {saved && (
         <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-emerald-400 text-sm">
           <CheckCircle2 size={15} />
@@ -1165,10 +1411,11 @@ function FareSettingsPage() {
 // ─── Audit Logs Page ──────────────────────────────────────────────────────────
 
 function AuditLogsPage() {
+  const { data: auditLogs, loading, error, reload } = useRealtimeRows("audit_logs", mapAuditLog);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  const filtered = MOCK_AUDIT.filter((l) => {
+  const filtered = auditLogs.filter((l) => {
     const matchSearch = l.action.toLowerCase().includes(search.toLowerCase()) ||
       l.performed_by.toLowerCase().includes(search.toLowerCase()) ||
       l.target.toLowerCase().includes(search.toLowerCase());
@@ -1209,7 +1456,11 @@ function AuditLogsPage() {
           <p className="text-sm text-muted-foreground"><span className="text-foreground font-medium">{filtered.length}</span> log entries</p>
         </div>
         <div className="divide-y divide-border">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <LoadingState message="Loading audit logs..." />
+          ) : error ? (
+            <ErrorState message={error} onRetry={reload} />
+          ) : filtered.length === 0 ? (
             <EmptyState message="No audit logs found" />
           ) : filtered.map((log) => {
             const IconComp = typeIcons[log.action_type] || Activity;
@@ -1370,7 +1621,6 @@ export default function App() {
   const [adminName, setAdminName] = useState("Super Admin");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [stats] = useState(MOCK_STATS);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -1410,13 +1660,8 @@ export default function App() {
     setLoginError("");
 
     if (isDemoMode) {
-      // Demo: accept any credentials
-      setTimeout(() => {
-        setAdminName("Super Admin (Demo)");
-        setAuthState("authenticated");
-        setPage("dashboard");
-        setLoginLoading(false);
-      }, 900);
+      setLoginError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY before signing in.");
+      setLoginLoading(false);
       return;
     }
 
@@ -1482,7 +1727,7 @@ export default function App() {
 
   const renderPage = () => {
     switch (page) {
-      case "dashboard": return <DashboardPage stats={stats} />;
+      case "dashboard": return <DashboardPage />;
       case "admins": return <AdminManagementPage />;
       case "users": return <UserManagementPage />;
       case "drivers": return <DriverApplicationsPage />;
@@ -1490,7 +1735,7 @@ export default function App() {
       case "fares": return <FareSettingsPage />;
       case "audit": return <AuditLogsPage />;
       case "settings": return <SystemSettingsPage />;
-      default: return <DashboardPage stats={stats} />;
+      default: return <DashboardPage />;
     }
   };
 
