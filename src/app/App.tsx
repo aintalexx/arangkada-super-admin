@@ -249,6 +249,21 @@ function ErrorState({ message, onRetry }: { message: string; onRetry?: () => voi
   );
 }
 
+function SetupState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center text-amber-400">
+      <AlertTriangle size={34} className="opacity-80" />
+      <p className="text-sm max-w-xl">{message}</p>
+      {onRetry && (
+        <GoldButton variant="outline" onClick={onRetry} className="text-xs py-1.5">
+          <RefreshCw size={13} />
+          Retry
+        </GoldButton>
+      )}
+    </div>
+  );
+}
+
 type DbRow = Record<string, unknown>;
 type DataState<T> = { data: T; loading: boolean; error: string; reload: () => Promise<void> };
 
@@ -264,16 +279,16 @@ const blankStats: Stats = {
 };
 
 const blankFares: FareSettings = {
-  solo_base_fare: 0,
-  solo_per_km: 0,
-  solo_min_fare: 0,
-  group_base_fare: 0,
-  group_per_km: 0,
-  group_min_fare: 0,
-  group_max_passengers: 0,
+  solo_base_fare: 16,
+  solo_per_km: 10,
+  solo_min_fare: 16,
+  group_base_fare: 11,
+  group_per_km: 7,
+  group_min_fare: 11,
+  group_max_passengers: 5,
   surge_multiplier: 1,
-  updated_at: "",
-  updated_by: "",
+  updated_at: "Not saved yet",
+  updated_by: "System",
 };
 
 const textValue = (row: DbRow, keys: string[], fallback = "") =>
@@ -366,6 +381,11 @@ const mapAuditLog = (row: DbRow): AuditLog => ({
   details: textValue(row, ["details", "description", "message"], ""),
   created_at: dateValue(row, ["created_at", "logged_at"]),
 });
+
+async function writeAuditLog(log: Omit<AuditLog, "id" | "created_at">) {
+  if (isDemoMode) return;
+  await supabase.from("audit_logs").insert(log);
+}
 
 function useRealtimeRows<T extends { created_at?: string }>(table: string, mapper: (row: DbRow) => T): DataState<T[]> {
   const [data, setData] = useState<T[]>([]);
@@ -840,13 +860,31 @@ function AdminManagementPage() {
     const nextStatus = admin.status === "approved" || admin.status === "active" ? "inactive" : "approved";
     const { error: updateError } = await supabase.from("profiles").update({ approval_status: nextStatus, updated_at: new Date().toISOString() }).eq("id", admin.id);
     if (updateError) notify(updateError.message);
-    else notify("Admin status updated.");
+    else {
+      await writeAuditLog({
+        action: "Admin Status Updated",
+        action_type: "admin",
+        performed_by: "Super Admin",
+        target: `${admin.full_name} (${admin.email})`,
+        details: `Admin approval status changed to ${nextStatus}.`,
+      });
+      notify("Admin status updated.");
+    }
   };
 
   const deleteAdmin = async (id: string) => {
     const { error: deleteError } = await supabase.from("profiles").delete().eq("id", id);
     if (deleteError) notify(deleteError.message);
-    else notify("Admin profile deleted.");
+    else {
+      await writeAuditLog({
+        action: "Admin Profile Deleted",
+        action_type: "admin",
+        performed_by: "Super Admin",
+        target: id,
+        details: "Admin profile row deleted from profiles.",
+      });
+      notify("Admin profile deleted.");
+    }
   };
 
   const createAdmin = async () => {
@@ -864,6 +902,13 @@ function AdminManagementPage() {
     }
     setNewAdmin({ email: "", full_name: "", phone: "", password: "" });
     setShowCreate(false);
+    await writeAuditLog({
+      action: "Admin Profile Created",
+      action_type: "admin",
+      performed_by: "Super Admin",
+      target: `${newAdmin.full_name} (${newAdmin.email})`,
+      details: "New admin profile created with role admin.",
+    });
     notify("Admin profile created successfully.");
   };
 
@@ -1072,6 +1117,13 @@ function DriverApplicationsPage() {
       notify(updateError.message);
       return;
     }
+    await writeAuditLog({
+      action: `Driver Application ${status === "approved" ? "Approved" : "Rejected"}`,
+      action_type: "driver",
+      performed_by: "Super Admin",
+      target: id,
+      details: `Driver application approval_status changed to ${status}.`,
+    });
     setSelected(null);
     notify(`Application ${status}.`);
   };
@@ -1343,6 +1395,13 @@ function FareSettingsPage() {
       return;
     }
     setFares(payload);
+    await writeAuditLog({
+      action: "Fare Settings Updated",
+      action_type: "fare",
+      performed_by: "Super Admin",
+      target: "Fare Settings",
+      details: `Solo base ${payload.solo_base_fare}, per km ${payload.solo_per_km}, group base ${payload.group_base_fare}, surge ${payload.surge_multiplier}.`,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -1368,7 +1427,15 @@ function FareSettingsPage() {
   return (
     <div className="space-y-5 max-w-3xl">
       {loading && <div className="bg-card border border-border rounded-lg"><LoadingState message="Loading fare settings..." /></div>}
-      {error && <div className="bg-card border border-border rounded-lg"><ErrorState message={tableMissing ? `${error} Add or expose the existing fare settings table before saving.` : error} onRetry={loadFares} /></div>}
+      {error && (
+        <div className="bg-card border border-border rounded-lg">
+          {tableMissing ? (
+            <SetupState message={`${error} Apply the new Super Admin Supabase migration to enable live fare editing.`} onRetry={loadFares} />
+          ) : (
+            <ErrorState message={error} onRetry={loadFares} />
+          )}
+        </div>
+      )}
       {saved && (
         <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-emerald-400 text-sm">
           <CheckCircle2 size={15} />
@@ -1490,7 +1557,11 @@ function AuditLogsPage() {
           {loading ? (
             <LoadingState message="Loading audit logs..." />
           ) : error ? (
-            <ErrorState message={error} onRetry={reload} />
+            error.includes("table was not found") ? (
+              <SetupState message="Audit logs are not set up yet. Apply the new Super Admin Supabase migration to enable live audit history." onRetry={reload} />
+            ) : (
+              <ErrorState message={error} onRetry={reload} />
+            )
           ) : filtered.length === 0 ? (
             <EmptyState message="No audit logs found" />
           ) : filtered.map((log) => {
