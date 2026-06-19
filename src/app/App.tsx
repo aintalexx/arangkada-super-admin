@@ -8,7 +8,7 @@ import {
   MapPin, Phone, Mail, ChevronRight, CheckCircle2, Ban, AlertCircle,
   FileText, Sliders
 } from "lucide-react";
-import { supabase, isDemoMode } from "../lib/supabase";
+import { supabase, isDemoMode, supabaseConfigError } from "../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -278,6 +278,14 @@ const blankFares: FareSettings = {
 
 const textValue = (row: DbRow, keys: string[], fallback = "") =>
   keys.map((key) => row[key]).find((value) => value !== undefined && value !== null && value !== "")?.toString() ?? fallback;
+const combinedName = (row: DbRow, fallback: string) => {
+  const direct = textValue(row, ["full_name", "name", "display_name", "driver_name", "passenger_name"]);
+  if (direct) return direct;
+  const parts = ["first_name", "middle_name", "surname", "last_name", "suffix"]
+    .map((key) => textValue(row, [key]))
+    .filter(Boolean);
+  return parts.length ? parts.join(" ") : fallback;
+};
 
 const numberValue = (row: DbRow, keys: string[], fallback = 0) => {
   const value = keys.map((key) => row[key]).find((item) => item !== undefined && item !== null && item !== "");
@@ -286,6 +294,9 @@ const numberValue = (row: DbRow, keys: string[], fallback = 0) => {
 };
 
 const dateValue = (row: DbRow, keys: string[]) => textValue(row, keys, "—");
+const normalizeRole = (role?: string | null) => (role ?? "").trim().toLowerCase();
+const isMissingTableError = (error?: { code?: string; message?: string } | null) =>
+  error?.code === "PGRST205" || error?.message?.toLowerCase().includes("could not find the table");
 const timeMs = (value: string) => {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -294,9 +305,9 @@ const timeMs = (value: string) => {
 const mapProfile = (row: DbRow): Profile => ({
   id: textValue(row, ["id", "user_id", "profile_id"], crypto.randomUUID()),
   email: textValue(row, ["email", "email_address"]),
-  full_name: textValue(row, ["full_name", "name", "display_name", "first_name"], "Unnamed user"),
+  full_name: combinedName(row, "Unnamed user"),
   role: textValue(row, ["role", "user_role"], "user"),
-  status: textValue(row, ["status", "account_status"], "active"),
+  status: textValue(row, ["status", "account_status", "approval_status"], "active"),
   phone: textValue(row, ["phone", "phone_number", "mobile_number"], ""),
   created_at: dateValue(row, ["created_at", "joined_at", "inserted_at"]),
   last_login: textValue(row, ["last_login", "last_sign_in_at"], ""),
@@ -305,15 +316,15 @@ const mapProfile = (row: DbRow): Profile => ({
 const mapDriver = (row: DbRow): DriverApp => ({
   id: textValue(row, ["id", "driver_id"], crypto.randomUUID()),
   driver_id: textValue(row, ["driver_id", "profile_id", "user_id", "id"]),
-  name: textValue(row, ["full_name", "name", "driver_name"], "Unnamed driver"),
+  name: combinedName(row, "Unnamed driver"),
   email: textValue(row, ["email", "email_address"]),
   phone: textValue(row, ["phone", "phone_number", "mobile_number"]),
   license_number: textValue(row, ["license_number", "driver_license", "license_no"]),
-  vehicle_make: textValue(row, ["vehicle_make", "make"]),
+  vehicle_make: textValue(row, ["vehicle_make", "make", "vehicle_type"]),
   vehicle_model: textValue(row, ["vehicle_model", "model"]),
   vehicle_year: textValue(row, ["vehicle_year", "year"]),
   vehicle_plate: textValue(row, ["vehicle_plate", "plate_number", "vehicle_plate_number"]),
-  status: textValue(row, ["status", "application_status"], "pending") as DriverApp["status"],
+  status: textValue(row, ["status", "application_status", "approval_status", "account_status"], "pending") as DriverApp["status"],
   applied_at: dateValue(row, ["applied_at", "created_at", "submitted_at"]),
   reviewed_at: textValue(row, ["reviewed_at", "updated_at"]),
   reviewed_by: textValue(row, ["reviewed_by", "approved_by"]),
@@ -371,7 +382,12 @@ function useRealtimeRows<T extends { created_at?: string }>(table: string, mappe
     setError("");
     const { data: rows, error: queryError } = await supabase.from(table).select("*");
     if (queryError) {
-      setError(queryError.message);
+      if (isMissingTableError(queryError)) {
+        setData([]);
+        setError(`${table} table was not found in Supabase.`);
+      } else {
+        setError(queryError.message);
+      }
     } else {
       setData(((rows ?? []) as DbRow[]).map(mapper).sort((a, b) => timeMs(b.created_at ?? "") - timeMs(a.created_at ?? "")));
     }
@@ -413,9 +429,14 @@ function useDashboardData(): DataState<{ stats: Stats; bookings: Booking[]; audi
       supabase.from("audit_logs").select("*"),
     ]);
 
-    const firstError = profilesRes.error || driversRes.error || bookingsRes.error || auditRes.error;
+    const firstError = profilesRes.error || driversRes.error || bookingsRes.error;
     if (firstError) {
       setError(firstError.message);
+      setLoading(false);
+      return;
+    }
+    if (auditRes.error && !isMissingTableError(auditRes.error)) {
+      setError(auditRes.error.message);
       setLoading(false);
       return;
     }
@@ -423,13 +444,13 @@ function useDashboardData(): DataState<{ stats: Stats; bookings: Booking[]; audi
     const profiles = ((profilesRes.data ?? []) as DbRow[]).map(mapProfile);
     const drivers = ((driversRes.data ?? []) as DbRow[]).map(mapDriver);
     const bookings = ((bookingsRes.data ?? []) as DbRow[]).map(mapBooking).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at));
-    const auditLogs = ((auditRes.data ?? []) as DbRow[]).map(mapAuditLog).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at)).slice(0, 5);
+    const auditLogs = auditRes.error ? [] : ((auditRes.data ?? []) as DbRow[]).map(mapAuditLog).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at)).slice(0, 5);
 
     setData({
       stats: {
-        passengers: profiles.filter((p) => p.role === "passenger").length,
+        passengers: profiles.filter((p) => normalizeRole(p.role) === "passenger").length,
         drivers: drivers.filter((d) => d.status === "approved" || d.status === "active").length,
-        admins: profiles.filter((p) => p.role === "admin" || p.role === "super_admin").length,
+        admins: profiles.filter((p) => ["admin", "super_admin"].includes(normalizeRole(p.role))).length,
         bookings: bookings.length,
         pending_drivers: drivers.filter((d) => d.status === "pending").length,
         completed: bookings.filter((b) => b.status === "completed").length,
@@ -577,7 +598,7 @@ function Layout({ children, currentPage, onNavigate, onLogout, adminName }: {
           {isDemoMode && (
             <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/25 rounded-full text-xs text-amber-400 font-mono">
               <Activity size={12} />
-              Demo Mode
+              Config Required
             </span>
           )}
           <div className="flex items-center gap-2 pl-3 border-l border-border">
@@ -638,7 +659,7 @@ function LoginPage({ onLogin, loading, error }: { onLogin: (email: string, pass:
             <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg text-amber-400 text-xs mb-5">
               <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
               <div>
-                <strong>Demo Mode</strong> — Supabase not connected. Use any credentials to preview the panel. Configure <code className="font-mono">VITE_SUPABASE_URL</code> and <code className="font-mono">VITE_SUPABASE_ANON_KEY</code> for production.
+                <strong>Supabase configuration required</strong> — {supabaseConfigError || "Supabase is not connected."} Configure <code className="font-mono">VITE_SUPABASE_URL</code> and <code className="font-mono">VITE_SUPABASE_ANON_KEY</code> before signing in.
               </div>
             </div>
           )}
@@ -808,7 +829,7 @@ function AdminManagementPage() {
   const [toast, setToast] = useState("");
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
-  const admins = profiles.filter((a) => a.role === "admin" || a.role === "super_admin");
+  const admins = profiles.filter((a) => ["admin", "super_admin"].includes(normalizeRole(a.role)));
 
   const filtered = admins.filter((a) =>
     a.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -816,8 +837,8 @@ function AdminManagementPage() {
   );
 
   const toggleStatus = async (admin: Profile) => {
-    const nextStatus = admin.status === "active" ? "inactive" : "active";
-    const { error: updateError } = await supabase.from("profiles").update({ status: nextStatus }).eq("id", admin.id);
+    const nextStatus = admin.status === "approved" || admin.status === "active" ? "inactive" : "approved";
+    const { error: updateError } = await supabase.from("profiles").update({ approval_status: nextStatus, updated_at: new Date().toISOString() }).eq("id", admin.id);
     if (updateError) notify(updateError.message);
     else notify("Admin status updated.");
   };
@@ -835,7 +856,7 @@ function AdminManagementPage() {
       full_name: newAdmin.full_name,
       phone: newAdmin.phone,
       role: "admin",
-      status: "active",
+      approval_status: "approved",
     });
     if (insertError) {
       notify(insertError.message);
@@ -895,7 +916,7 @@ function AdminManagementPage() {
                   <td className="px-4 py-3 text-sm text-muted-foreground">{a.email}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{a.phone || "—"}</td>
                   <td className="px-4 py-3">
-                    <Badge variant={a.status === "active" ? "success" : "muted"}>{a.status}</Badge>
+                    <Badge variant={a.status === "active" || a.status === "approved" ? "success" : "muted"}>{a.status}</Badge>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{a.last_login || "—"}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{a.created_at}</td>
@@ -904,8 +925,8 @@ function AdminManagementPage() {
                       <button onClick={() => setShowEdit(a)} className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                         <Edit2 size={14} />
                       </button>
-                      <button onClick={() => toggleStatus(a)} className={`p-1.5 rounded hover:bg-white/5 transition-colors ${a.status === "active" ? "text-amber-400 hover:text-amber-300" : "text-emerald-400 hover:text-emerald-300"}`} title={a.status === "active" ? "Deactivate" : "Activate"}>
-                        {a.status === "active" ? <Ban size={14} /> : <UserCheck size={14} />}
+                      <button onClick={() => toggleStatus(a)} className={`p-1.5 rounded hover:bg-white/5 transition-colors ${a.status === "active" || a.status === "approved" ? "text-amber-400 hover:text-amber-300" : "text-emerald-400 hover:text-emerald-300"}`} title={a.status === "active" || a.status === "approved" ? "Deactivate" : "Activate"}>
+                        {a.status === "active" || a.status === "approved" ? <Ban size={14} /> : <UserCheck size={14} />}
                       </button>
                       <button onClick={() => deleteAdmin(a.id)} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
                         <Trash2 size={14} />
@@ -958,7 +979,7 @@ function UserManagementPage() {
   const [tab, setTab] = useState<"passengers" | "drivers">("passengers");
   const [search, setSearch] = useState("");
 
-  const data = profiles.filter((profile) => profile.role === (tab === "passengers" ? "passenger" : "driver"));
+  const data = profiles.filter((profile) => normalizeRole(profile.role) === (tab === "passengers" ? "passenger" : "driver"));
   const filtered = data.filter((u) =>
     u.full_name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase())
@@ -1013,7 +1034,7 @@ function UserManagementPage() {
                   <td className="px-4 py-3 text-sm text-muted-foreground">{u.email}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{u.phone || "—"}</td>
                   <td className="px-4 py-3"><Badge variant="muted">{u.role}</Badge></td>
-                  <td className="px-4 py-3"><Badge variant={u.status === "active" ? "success" : u.status === "suspended" ? "danger" : "muted"}>{u.status}</Badge></td>
+                  <td className="px-4 py-3"><Badge variant={u.status === "active" || u.status === "approved" ? "success" : u.status === "suspended" || u.status === "rejected" ? "danger" : "muted"}>{u.status}</Badge></td>
                   <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{u.created_at}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
@@ -1045,7 +1066,7 @@ function DriverApplicationsPage() {
   const review = async (id: string, status: "approved" | "rejected") => {
     const { error: updateError } = await supabase
       .from("drivers")
-      .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: "Super Admin" })
+      .update({ approval_status: status, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (updateError) {
       notify(updateError.message);
@@ -1265,6 +1286,7 @@ function FareSettingsPage() {
   const [fares, setFares] = useState(blankFares);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tableMissing, setTableMissing] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const loadFares = useCallback(async () => {
@@ -1275,8 +1297,16 @@ function FareSettingsPage() {
     }
     setLoading(true);
     setError("");
+    setTableMissing(false);
     const { data, error: queryError } = await supabase.from("fare_settings").select("*");
-    if (queryError) setError(queryError.message);
+    if (queryError) {
+      if (isMissingTableError(queryError)) {
+        setTableMissing(true);
+        setError("fare_settings table was not found in Supabase.");
+      } else {
+        setError(queryError.message);
+      }
+    }
     else {
       const latest = ((data ?? []) as DbRow[]).sort((a, b) => timeMs(textValue(b, ["updated_at", "created_at"])) - timeMs(textValue(a, ["updated_at", "created_at"])))[0];
       setFareId(latest ? textValue(latest, ["id"]) : null);
@@ -1303,6 +1333,7 @@ function FareSettingsPage() {
   };
 
   const save = async () => {
+    if (tableMissing) return;
     const payload = { ...fares, updated_at: new Date().toISOString(), updated_by: "Super Admin" };
     const { error: saveError } = fareId
       ? await supabase.from("fare_settings").update(payload).eq("id", fareId)
@@ -1337,7 +1368,7 @@ function FareSettingsPage() {
   return (
     <div className="space-y-5 max-w-3xl">
       {loading && <div className="bg-card border border-border rounded-lg"><LoadingState message="Loading fare settings..." /></div>}
-      {error && <div className="bg-card border border-border rounded-lg"><ErrorState message={error} onRetry={loadFares} /></div>}
+      {error && <div className="bg-card border border-border rounded-lg"><ErrorState message={tableMissing ? `${error} Add or expose the existing fare settings table before saving.` : error} onRetry={loadFares} /></div>}
       {saved && (
         <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-emerald-400 text-sm">
           <CheckCircle2 size={15} />
@@ -1399,7 +1430,7 @@ function FareSettingsPage() {
           <p>Last updated: <span className="text-foreground font-mono">{fares.updated_at}</span></p>
           <p>Updated by: <span className="text-foreground">{fares.updated_by}</span></p>
         </div>
-        <GoldButton onClick={save}>
+        <GoldButton onClick={save} disabled={loading || tableMissing}>
           <Check size={15} />
           Save Fare Settings
         </GoldButton>
@@ -1575,7 +1606,7 @@ function SystemSettingsPage() {
               <Database size={15} className="text-[#C9952A]" />
               <div>
                 <p className="text-sm text-foreground">Supabase Connection</p>
-                <p className="text-xs text-muted-foreground">{isDemoMode ? "Not connected — Demo mode active" : "Connected to production database"}</p>
+                <p className="text-xs text-muted-foreground">{isDemoMode ? supabaseConfigError || "Not connected" : "Connected to production database"}</p>
               </div>
             </div>
             <Badge variant={isDemoMode ? "warning" : "success"}>{isDemoMode ? "Demo" : "Live"}</Badge>
@@ -1633,13 +1664,15 @@ export default function App() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { setAuthState("unauthenticated"); return; }
 
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("full_name, role")
           .eq("id", session.user.id)
-          .single();
+          .maybeSingle();
 
-        if (profile?.role === "super_admin") {
+        if (profileError) throw profileError;
+
+        if (normalizeRole(profile?.role) === "super_admin") {
           setAdminName(profile.full_name || session.user.email || "Super Admin");
           setAuthState("authenticated");
           setPage("dashboard");
@@ -1670,13 +1703,15 @@ export default function App() {
       if (error) throw error;
       if (!data.user) throw new Error("Login failed");
 
-      const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("full_name, role")
         .eq("id", data.user.id)
-        .single();
+        .maybeSingle();
 
-      if (profile?.role !== "super_admin") {
+      if (profileError) throw profileError;
+
+      if (normalizeRole(profile?.role) !== "super_admin") {
         await supabase.auth.signOut();
         setAuthState("unauthorized");
         setPage("unauthorized");
