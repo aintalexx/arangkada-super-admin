@@ -845,7 +845,8 @@ function AdminManagementPage() {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState<Profile | null>(null);
-  const [newAdmin, setNewAdmin] = useState({ email: "", full_name: "", phone: "", password: "" });
+  const [editAdmin, setEditAdmin] = useState({ full_name: "", email: "", phone: "" });
+  const [newAdmin, setNewAdmin] = useState({ email: "", full_name: "", phone: "" });
   const [toast, setToast] = useState("");
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
@@ -855,6 +856,43 @@ function AdminManagementPage() {
     a.full_name.toLowerCase().includes(search.toLowerCase()) ||
     a.email.toLowerCase().includes(search.toLowerCase())
   );
+
+  const openEditAdmin = (admin: Profile) => {
+    setShowEdit(admin);
+    setEditAdmin({
+      full_name: admin.full_name,
+      email: admin.email,
+      phone: admin.phone || "",
+    });
+  };
+
+  const saveAdmin = async () => {
+    if (!showEdit || !editAdmin.full_name || !editAdmin.email) return;
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        full_name: editAdmin.full_name,
+        email: editAdmin.email,
+        phone: editAdmin.phone,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", showEdit.id);
+
+    if (updateError) {
+      notify(updateError.message);
+      return;
+    }
+
+    await writeAuditLog({
+      action: "Admin Profile Updated",
+      action_type: "admin",
+      performed_by: "Super Admin",
+      target: `${editAdmin.full_name} (${editAdmin.email})`,
+      details: "Admin profile details updated.",
+    });
+    setShowEdit(null);
+    notify("Admin updated.");
+  };
 
   const toggleStatus = async (admin: Profile) => {
     const nextStatus = admin.status === "approved" || admin.status === "active" ? "inactive" : "approved";
@@ -889,27 +927,48 @@ function AdminManagementPage() {
 
   const createAdmin = async () => {
     if (!newAdmin.email || !newAdmin.full_name) return;
-    const { error: insertError } = await supabase.from("profiles").insert({
-      email: newAdmin.email,
-      full_name: newAdmin.full_name,
-      phone: newAdmin.phone,
-      role: "admin",
-      approval_status: "approved",
-    });
-    if (insertError) {
-      notify(insertError.message);
+    const { data: existing, error: findError } = await supabase
+      .from("profiles")
+      .select("id, email, full_name")
+      .eq("email", newAdmin.email)
+      .maybeSingle();
+
+    if (findError) {
+      notify(findError.message);
       return;
     }
-    setNewAdmin({ email: "", full_name: "", phone: "", password: "" });
-    setShowCreate(false);
+
+    if (!existing?.id) {
+      notify("No Supabase Auth profile found for that email. Create the Auth user first, then promote it here.");
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        full_name: newAdmin.full_name,
+        phone: newAdmin.phone,
+        role: "admin",
+        approval_status: "approved",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+
+    if (updateError) {
+      notify(updateError.message);
+      return;
+    }
+
     await writeAuditLog({
-      action: "Admin Profile Created",
+      action: "Admin Profile Promoted",
       action_type: "admin",
       performed_by: "Super Admin",
       target: `${newAdmin.full_name} (${newAdmin.email})`,
-      details: "New admin profile created with role admin.",
+      details: "Existing Supabase profile promoted to admin.",
     });
-    notify("Admin profile created successfully.");
+    setNewAdmin({ email: "", full_name: "", phone: "" });
+    setShowCreate(false);
+    notify("Existing profile promoted to admin.");
   };
 
   return (
@@ -967,7 +1026,7 @@ function AdminManagementPage() {
                   <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{a.created_at}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => setShowEdit(a)} className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                      <button onClick={() => openEditAdmin(a)} className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                         <Edit2 size={14} />
                       </button>
                       <button onClick={() => toggleStatus(a)} className={`p-1.5 rounded hover:bg-white/5 transition-colors ${a.status === "active" || a.status === "approved" ? "text-amber-400 hover:text-amber-300" : "text-emerald-400 hover:text-emerald-300"}`} title={a.status === "active" || a.status === "approved" ? "Deactivate" : "Activate"}>
@@ -988,10 +1047,12 @@ function AdminManagementPage() {
       {/* Create Admin Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Admin Account">
         <div className="space-y-4">
-          <Input label="Full Name" value={newAdmin.full_name} onChange={(e) => setNewAdmin({ ...newAdmin, full_name: e.target.value })} placeholder="Juan dela Cruz" />
-          <Input label="Email Address" type="email" value={newAdmin.email} onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })} placeholder="admin@arangkada.ph" />
-          <Input label="Phone Number" value={newAdmin.phone} onChange={(e) => setNewAdmin({ ...newAdmin, phone: e.target.value })} placeholder="+63 912 345 6789" />
-          <Input label="Temporary Password" type="password" value={newAdmin.password} onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })} placeholder="Min. 8 characters" />
+            <Input label="Full Name" value={newAdmin.full_name} onChange={(e) => setNewAdmin({ ...newAdmin, full_name: e.target.value })} placeholder="Full name" />
+            <Input label="Email Address" type="email" value={newAdmin.email} onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })} placeholder="Email address" />
+            <Input label="Phone Number" value={newAdmin.phone} onChange={(e) => setNewAdmin({ ...newAdmin, phone: e.target.value })} placeholder="Phone number" />
+          <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg text-xs text-amber-400">
+            Admin login accounts must already exist in Supabase Auth. This action promotes the matching profile email to admin.
+          </div>
           <div className="flex gap-2 pt-2">
             <GoldButton onClick={createAdmin} className="flex-1 justify-center"><UserPlus size={15} />Create Account</GoldButton>
             <GoldButton variant="outline" onClick={() => setShowCreate(false)} className="flex-1 justify-center"><X size={15} />Cancel</GoldButton>
@@ -1003,11 +1064,11 @@ function AdminManagementPage() {
       <Modal open={!!showEdit} onClose={() => setShowEdit(null)} title="Edit Admin">
         {showEdit && (
           <div className="space-y-4">
-            <Input label="Full Name" defaultValue={showEdit.full_name} />
-            <Input label="Email" defaultValue={showEdit.email} />
-            <Input label="Phone" defaultValue={showEdit.phone} />
+            <Input label="Full Name" value={editAdmin.full_name} onChange={(e) => setEditAdmin({ ...editAdmin, full_name: e.target.value })} />
+            <Input label="Email" value={editAdmin.email} onChange={(e) => setEditAdmin({ ...editAdmin, email: e.target.value })} />
+            <Input label="Phone" value={editAdmin.phone} onChange={(e) => setEditAdmin({ ...editAdmin, phone: e.target.value })} />
             <div className="flex gap-2 pt-2">
-              <GoldButton onClick={() => { setShowEdit(null); notify("Admin updated."); }} className="flex-1 justify-center"><Check size={15} />Save Changes</GoldButton>
+              <GoldButton onClick={saveAdmin} className="flex-1 justify-center"><Check size={15} />Save Changes</GoldButton>
               <GoldButton variant="outline" onClick={() => setShowEdit(null)} className="flex-1 justify-center"><X size={15} />Cancel</GoldButton>
             </div>
           </div>
@@ -1023,6 +1084,10 @@ function UserManagementPage() {
   const { data: profiles, loading, error, reload } = useRealtimeRows("profiles", mapProfile);
   const [tab, setTab] = useState<"passengers" | "drivers">("passengers");
   const [search, setSearch] = useState("");
+  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
+  const [toast, setToast] = useState("");
+
+  const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
   const data = profiles.filter((profile) => normalizeRole(profile.role) === (tab === "passengers" ? "passenger" : "driver"));
   const filtered = data.filter((u) =>
@@ -1030,8 +1095,38 @@ function UserManagementPage() {
     u.email.toLowerCase().includes(search.toLowerCase())
   );
 
+  const toggleUserStatus = async (user: Profile) => {
+    const active = user.status === "active" || user.status === "approved";
+    const nextStatus = active ? "rejected" : "approved";
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ approval_status: nextStatus, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+
+    if (updateError) {
+      notify(updateError.message);
+      return;
+    }
+
+    await writeAuditLog({
+      action: active ? "User Account Suspended" : "User Account Reactivated",
+      action_type: "user",
+      performed_by: "Super Admin",
+      target: `${user.full_name} (${user.email})`,
+      details: `User approval_status changed to ${nextStatus}.`,
+    });
+    notify(active ? "User suspended." : "User reactivated.");
+  };
+
   return (
     <div className="space-y-4">
+      {toast && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-[#1E0808] border border-[#C9952A]/40 rounded-lg text-sm text-foreground shadow-xl">
+          <CheckCircle2 size={15} className="text-[#C9952A]" />
+          {toast}
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 p-1 bg-card border border-border rounded-lg w-fit">
         {(["passengers", "drivers"] as const).map((t) => (
@@ -1083,8 +1178,10 @@ function UserManagementPage() {
                   <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{u.created_at}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="View"><Eye size={14} /></button>
-                      <button className="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-400 transition-colors" title="Suspend"><Ban size={14} /></button>
+                      <button onClick={() => setSelectedUser(u)} className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="View"><Eye size={14} /></button>
+                      <button onClick={() => toggleUserStatus(u)} className="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-400 transition-colors" title={u.status === "active" || u.status === "approved" ? "Suspend" : "Reactivate"}>
+                        {u.status === "active" || u.status === "approved" ? <Ban size={14} /> : <UserCheck size={14} />}
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -1093,6 +1190,35 @@ function UserManagementPage() {
           </table>
         </div>
       </div>
+
+      <Modal open={!!selectedUser} onClose={() => setSelectedUser(null)} title="User Details">
+        {selectedUser && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><p className="text-muted-foreground text-xs mb-1">Full Name</p><p className="text-foreground">{selectedUser.full_name}</p></div>
+              <div><p className="text-muted-foreground text-xs mb-1">Email</p><p className="text-foreground">{selectedUser.email || "—"}</p></div>
+              <div><p className="text-muted-foreground text-xs mb-1">Phone</p><p className="text-foreground">{selectedUser.phone || "—"}</p></div>
+              <div><p className="text-muted-foreground text-xs mb-1">Role</p><Badge variant="muted">{selectedUser.role}</Badge></div>
+              <div><p className="text-muted-foreground text-xs mb-1">Status</p><Badge variant={selectedUser.status === "active" || selectedUser.status === "approved" ? "success" : selectedUser.status === "rejected" || selectedUser.status === "suspended" ? "danger" : "muted"}>{selectedUser.status}</Badge></div>
+              <div><p className="text-muted-foreground text-xs mb-1">Joined</p><p className="text-foreground font-mono">{selectedUser.created_at}</p></div>
+            </div>
+            <div className="flex gap-2 pt-2 border-t border-border">
+              <GoldButton
+                variant={selectedUser.status === "active" || selectedUser.status === "approved" ? "danger" : "primary"}
+                onClick={() => {
+                  toggleUserStatus(selectedUser);
+                  setSelectedUser(null);
+                }}
+                className="flex-1 justify-center"
+              >
+                {selectedUser.status === "active" || selectedUser.status === "approved" ? <Ban size={15} /> : <UserCheck size={15} />}
+                {selectedUser.status === "active" || selectedUser.status === "approved" ? "Suspend" : "Reactivate"}
+              </GoldButton>
+              <GoldButton variant="outline" onClick={() => setSelectedUser(null)} className="flex-1 justify-center"><X size={15} />Close</GoldButton>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -1600,72 +1726,8 @@ function AuditLogsPage() {
 // ─── System Settings Page ─────────────────────────────────────────────────────
 
 function SystemSettingsPage() {
-  const [maintenance, setMaintenance] = useState(false);
-  const [emailNotifs, setEmailNotifs] = useState(true);
-  const [smsNotifs, setSmsNotifs] = useState(false);
-  const [autoApprove, setAutoApprove] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 3000); };
-
-  const Toggle = ({ label, desc, value, onChange }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void }) => (
-    <div className="flex items-start justify-between gap-4 py-4 border-b border-border last:border-0">
-      <div>
-        <p className="text-sm text-foreground font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-      </div>
-      <button
-        onClick={() => onChange(!value)}
-        className={`flex-shrink-0 relative w-11 h-6 rounded-full transition-colors ${value ? "bg-[#C9952A]" : "bg-[#3A1010]"}`}
-      >
-        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${value ? "left-6" : "left-1"}`} />
-      </button>
-    </div>
-  );
-
   return (
     <div className="space-y-5 max-w-2xl">
-      {saved && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-emerald-400 text-sm">
-          <CheckCircle2 size={15} />
-          System settings saved. Changes logged.
-        </div>
-      )}
-
-      {/* App Info */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-5 py-4 border-b border-border bg-[#1A0707]">
-          <h3 className="font-['Crimson_Pro'] text-lg text-foreground">Application Info</h3>
-        </div>
-        <div className="p-5 grid sm:grid-cols-2 gap-4">
-          <Input label="App Name" defaultValue="Arangkada" />
-          <Input label="App Version" defaultValue="2.1.4" />
-          <Input label="Support Email" defaultValue="support@arangkada.ph" />
-          <Input label="Support Phone" defaultValue="+63 2 8888 0000" />
-          <div className="sm:col-span-2">
-            <label className="block text-sm text-muted-foreground mb-1.5">App Description</label>
-            <textarea
-              defaultValue="Arangkada is a motorcycle taxi hailing app connecting passengers with verified tricycle and motorcycle drivers across the Philippines."
-              rows={3}
-              className="w-full bg-[#1E0808] border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#C9952A]/60 transition-colors resize-none"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Feature Toggles */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-5 py-4 border-b border-border bg-[#1A0707]">
-          <h3 className="font-['Crimson_Pro'] text-lg text-foreground">Feature Controls</h3>
-        </div>
-        <div className="px-5">
-          <Toggle label="Maintenance Mode" desc="Disables booking for all users. Display maintenance message." value={maintenance} onChange={setMaintenance} />
-          <Toggle label="Email Notifications" desc="Send booking confirmations and alerts via email." value={emailNotifs} onChange={setEmailNotifs} />
-          <Toggle label="SMS Notifications" desc="Send OTPs and status updates via SMS gateway." value={smsNotifs} onChange={setSmsNotifs} />
-          <Toggle label="Auto-Approve Drivers" desc="Automatically approve driver applications (not recommended)." value={autoApprove} onChange={setAutoApprove} />
-        </div>
-      </div>
-
       {/* Database */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="px-5 py-4 border-b border-border bg-[#1A0707]">
@@ -1703,13 +1765,6 @@ function SystemSettingsPage() {
             <Badge variant="info">Vercel</Badge>
           </div>
         </div>
-      </div>
-
-      <div className="flex justify-end">
-        <GoldButton onClick={save}>
-          <Check size={15} />
-          Save Settings
-        </GoldButton>
       </div>
     </div>
   );
