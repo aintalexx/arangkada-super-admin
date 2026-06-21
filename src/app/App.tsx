@@ -25,6 +25,8 @@ interface Profile {
   phone?: string;
   created_at: string;
   last_login?: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 interface DriverApp {
@@ -42,6 +44,8 @@ interface DriverApp {
   applied_at: string;
   reviewed_at?: string;
   reviewed_by?: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 interface Booking {
@@ -56,6 +60,8 @@ interface Booking {
   ride_type: "solo" | "group";
   passengers_count: number;
   created_at: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 interface FareSettings {
@@ -73,12 +79,21 @@ interface FareSettings {
 
 interface AuditLog {
   id: string;
+  admin_id?: string;
   action: string;
   action_type: "admin" | "fare" | "driver" | "user" | "system" | string;
   performed_by: string;
   target: string;
   details: string;
   created_at: string;
+}
+
+interface DeletedRecord {
+  id: string;
+  table: "profiles" | "drivers" | "bookings" | "ratings";
+  label: string;
+  type: string;
+  deleted_at: string;
 }
 
 interface Stats {
@@ -182,6 +197,45 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
         <div className="p-5">{children}</div>
       </div>
     </div>
+  );
+}
+
+function ConfirmationModal({
+  open,
+  title,
+  message,
+  confirmLabel,
+  variant = "danger",
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  variant?: "primary" | "danger";
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal open={open} onClose={onCancel} title={title}>
+      <div className="space-y-4">
+        <div className="flex gap-3 p-3 rounded-lg border border-border bg-[#1E0808]">
+          <AlertTriangle size={18} className={variant === "danger" ? "text-red-400 flex-shrink-0 mt-0.5" : "text-[#C9952A] flex-shrink-0 mt-0.5"} />
+          <p className="text-sm text-foreground leading-relaxed">{message}</p>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <GoldButton variant={variant} onClick={onConfirm} className="flex-1 justify-center">
+            <Check size={15} />
+            {confirmLabel}
+          </GoldButton>
+          <GoldButton variant="outline" onClick={onCancel} className="flex-1 justify-center">
+            <X size={15} />
+            Cancel
+          </GoldButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -310,8 +364,15 @@ const numberValue = (row: DbRow, keys: string[], fallback = 0) => {
 
 const dateValue = (row: DbRow, keys: string[]) => textValue(row, keys, "—");
 const normalizeRole = (role?: string | null) => (role ?? "").trim().toLowerCase();
+const isAdminRole = (role?: string | null) => ["admin", "super_admin"].includes(normalizeRole(role));
+const isSuperAdminRole = (role?: string | null) => normalizeRole(role) === "super_admin";
+const highLevelPages = new Set<Page>(["admins", "settings"]);
+const isDeletedValue = (value: unknown) => value === true || value === "true" || value === 1 || value === "1";
+const isDeletedRow = (row: DbRow) => isDeletedValue(row.is_deleted);
 const isMissingTableError = (error?: { code?: string; message?: string } | null) =>
   error?.code === "PGRST205" || error?.message?.toLowerCase().includes("could not find the table");
+const isMissingColumnError = (error?: { code?: string; message?: string } | null) =>
+  error?.code === "PGRST204" || error?.message?.toLowerCase().includes("is_deleted");
 const timeMs = (value: string) => {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -326,6 +387,8 @@ const mapProfile = (row: DbRow): Profile => ({
   phone: textValue(row, ["phone", "phone_number", "mobile_number"], ""),
   created_at: dateValue(row, ["created_at", "joined_at", "inserted_at"]),
   last_login: textValue(row, ["last_login", "last_sign_in_at"], ""),
+  is_deleted: isDeletedRow(row),
+  deleted_at: textValue(row, ["deleted_at"], ""),
 });
 
 const mapDriver = (row: DbRow): DriverApp => ({
@@ -343,6 +406,8 @@ const mapDriver = (row: DbRow): DriverApp => ({
   applied_at: dateValue(row, ["applied_at", "created_at", "submitted_at"]),
   reviewed_at: textValue(row, ["reviewed_at", "updated_at"]),
   reviewed_by: textValue(row, ["reviewed_by", "approved_by"]),
+  is_deleted: isDeletedRow(row),
+  deleted_at: textValue(row, ["deleted_at"], ""),
 });
 
 const mapBooking = (row: DbRow): Booking => ({
@@ -357,6 +422,8 @@ const mapBooking = (row: DbRow): Booking => ({
   ride_type: textValue(row, ["ride_type", "type", "booking_type"], "solo") as Booking["ride_type"],
   passengers_count: numberValue(row, ["passengers_count", "passenger_count", "seats"], 1),
   created_at: dateValue(row, ["created_at", "booked_at", "requested_at"]),
+  is_deleted: isDeletedRow(row),
+  deleted_at: textValue(row, ["deleted_at"], ""),
 });
 
 const mapFareSettings = (row?: DbRow): FareSettings => row ? ({
@@ -374,6 +441,7 @@ const mapFareSettings = (row?: DbRow): FareSettings => row ? ({
 
 const mapAuditLog = (row: DbRow): AuditLog => ({
   id: textValue(row, ["id", "audit_id"], crypto.randomUUID()),
+  admin_id: textValue(row, ["admin_id", "actor_id", "performed_by_id"], ""),
   action: textValue(row, ["action", "event", "title"], "System event"),
   action_type: textValue(row, ["action_type", "type", "category"], "system"),
   performed_by: textValue(row, ["performed_by", "actor_name", "admin_name"], "System"),
@@ -382,12 +450,173 @@ const mapAuditLog = (row: DbRow): AuditLog => ({
   created_at: dateValue(row, ["created_at", "logged_at"]),
 });
 
-async function writeAuditLog(log: Omit<AuditLog, "id" | "created_at">) {
-  if (isDemoMode) return;
-  await supabase.from("audit_logs").insert(log);
+async function getCurrentAdminProfile() {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) throw new Error("Unauthorized access. Please sign in again.");
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, email, full_name, role")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  return {
+    id: userData.user.id,
+    email: textValue((profile ?? {}) as DbRow, ["email"], userData.user.email ?? ""),
+    full_name: textValue((profile ?? {}) as DbRow, ["full_name"], userData.user.email ?? "Admin"),
+    role: textValue((profile ?? {}) as DbRow, ["role"], ""),
+  };
 }
 
-function useRealtimeRows<T extends { created_at?: string }>(table: string, mapper: (row: DbRow) => T): DataState<T[]> {
+async function writeAuditLog(log: Omit<AuditLog, "id" | "created_at" | "performed_by"> & { performed_by?: string }) {
+  if (isDemoMode) return;
+  try {
+    const admin = await getCurrentAdminProfile();
+    const payload = {
+      ...log,
+      admin_id: admin.id,
+      performed_by: log.performed_by || `${admin.full_name}${admin.email ? ` (${admin.email})` : ""}`,
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("audit_logs").insert(payload);
+    if (!error) return;
+
+    const missingAdminId = error.code === "PGRST204" || error.message.toLowerCase().includes("admin_id");
+    if (!missingAdminId) {
+      console.warn("Audit log write failed:", error.message);
+      return;
+    }
+
+    const { admin_id: _adminId, ...fallbackPayload } = payload;
+    const { error: fallbackError } = await supabase.from("audit_logs").insert(fallbackPayload);
+    if (fallbackError) console.warn("Audit log write failed:", fallbackError.message);
+  } catch (err) {
+    console.warn("Audit log write failed:", err);
+  }
+}
+
+async function requireCurrentSuperAdmin() {
+  if (isDemoMode) throw new Error("Supabase is not configured.");
+
+  const profile = await getCurrentAdminProfile();
+  if (!isSuperAdminRole(profile.role)) throw new Error("Unauthorized. Super Admin access is required.");
+  return profile;
+}
+
+async function getAdminProfiles() {
+  const { data, error } = await supabase.from("profiles").select("id, role, is_deleted");
+  if (error) throw error;
+  return ((data ?? []) as DbRow[]).filter((profile) => !isDeletedRow(profile) && isAdminRole(textValue(profile, ["role"])));
+}
+
+async function softDeleteRecord(table: DeletedRecord["table"], id: string) {
+  const admin = await requireCurrentSuperAdmin();
+  const deletedAt = new Date().toISOString();
+  const payload = {
+    is_deleted: true,
+    deleted_at: deletedAt,
+    deleted_by: admin.id,
+    updated_at: deletedAt,
+  };
+  const { error } = await supabase
+    .from(table)
+    .update(payload)
+    .eq("id", id);
+  if (!error) return;
+  if (!isMissingColumnError(error)) throw error;
+
+  const { updated_at: _updatedAt, deleted_by: _deletedBy, ...fallbackPayload } = payload;
+  const { error: fallbackError } = await supabase.from(table).update(fallbackPayload).eq("id", id);
+  if (fallbackError) throw fallbackError;
+}
+
+async function restoreSoftDeletedRecord(table: DeletedRecord["table"], id: string) {
+  const admin = await requireCurrentSuperAdmin();
+  const restoredAt = new Date().toISOString();
+  const payload = {
+    is_deleted: false,
+    deleted_at: null,
+    deleted_by: null,
+    restored_at: restoredAt,
+    restored_by: admin.id,
+    updated_at: restoredAt,
+  };
+  const { error } = await supabase
+    .from(table)
+    .update(payload)
+    .eq("id", id);
+  if (!error) return;
+  if (!isMissingColumnError(error)) throw error;
+
+  const { updated_at: _updatedAt, deleted_by: _deletedBy, restored_at: _restoredAt, restored_by: _restoredBy, ...fallbackPayload } = payload;
+  const { error: fallbackError } = await supabase.from(table).update(fallbackPayload).eq("id", id);
+  if (fallbackError) throw fallbackError;
+}
+
+function mapDeletedRecord(table: DeletedRecord["table"], row: DbRow): DeletedRecord {
+  const profile = table === "profiles" ? mapProfile(row) : null;
+  const driver = table === "drivers" ? mapDriver(row) : null;
+  const booking = table === "bookings" ? mapBooking(row) : null;
+  const ratingLabel = `Rating ${textValue(row, ["id"], "record")}`;
+
+  return {
+    id: textValue(row, ["id"]),
+    table,
+    label: profile?.full_name || driver?.name || booking?.booking_ref || ratingLabel,
+    type: table === "profiles" ? textValue(row, ["role"], "profile") : table.slice(0, -1),
+    deleted_at: textValue(row, ["deleted_at"], "—"),
+  };
+}
+
+function useDeletedRecords(): DataState<DeletedRecord[]> {
+  const [data, setData] = useState<DeletedRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const reload = useCallback(async () => {
+    if (isDemoMode) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const tables: DeletedRecord["table"][] = ["profiles", "drivers", "bookings", "ratings"];
+    const results = await Promise.all(tables.map(async (table) => {
+      const { data: rows, error: queryError } = await supabase.from(table).select("*").eq("is_deleted", true);
+      if (queryError) {
+        if (isMissingTableError(queryError) || isMissingColumnError(queryError)) return [] as DeletedRecord[];
+        throw queryError;
+      }
+      return ((rows ?? []) as DbRow[]).map((row) => mapDeletedRecord(table, row));
+    }));
+    setData(results.flat().sort((a, b) => timeMs(b.deleted_at) - timeMs(a.deleted_at)));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    reload().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "Could not load deleted records.");
+      setLoading(false);
+    });
+    if (isDemoMode) return undefined;
+    const channels = ["profiles", "drivers", "bookings", "ratings"].map((table) =>
+      supabase.channel(`super-admin-deleted-${table}`)
+        .on("postgres_changes", { event: "*", schema: "public", table }, () => reload())
+        .subscribe()
+    );
+    return () => {
+      channels.forEach((channel) => supabase.removeChannel(channel));
+    };
+  }, [reload]);
+
+  return { data, loading, error, reload };
+}
+
+function useRealtimeRows<T extends { created_at?: string }>(table: string, mapper: (row: DbRow) => T, includeDeleted = false): DataState<T[]> {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -409,10 +638,13 @@ function useRealtimeRows<T extends { created_at?: string }>(table: string, mappe
         setError(queryError.message);
       }
     } else {
-      setData(((rows ?? []) as DbRow[]).map(mapper).sort((a, b) => timeMs(b.created_at ?? "") - timeMs(a.created_at ?? "")));
+      setData(((rows ?? []) as DbRow[])
+        .filter((row) => includeDeleted || !isDeletedRow(row))
+        .map(mapper)
+        .sort((a, b) => timeMs(b.created_at ?? "") - timeMs(a.created_at ?? "")));
     }
     setLoading(false);
-  }, [mapper, table]);
+  }, [includeDeleted, mapper, table]);
 
   useEffect(() => {
     reload();
@@ -461,9 +693,9 @@ function useDashboardData(): DataState<{ stats: Stats; bookings: Booking[]; audi
       return;
     }
 
-    const profiles = ((profilesRes.data ?? []) as DbRow[]).map(mapProfile);
-    const drivers = ((driversRes.data ?? []) as DbRow[]).map(mapDriver);
-    const bookings = ((bookingsRes.data ?? []) as DbRow[]).map(mapBooking).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at));
+    const profiles = ((profilesRes.data ?? []) as DbRow[]).filter((row) => !isDeletedRow(row)).map(mapProfile);
+    const drivers = ((driversRes.data ?? []) as DbRow[]).filter((row) => !isDeletedRow(row)).map(mapDriver);
+    const bookings = ((bookingsRes.data ?? []) as DbRow[]).filter((row) => !isDeletedRow(row)).map(mapBooking).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at));
     const auditLogs = auditRes.error ? [] : ((auditRes.data ?? []) as DbRow[]).map(mapAuditLog).sort((a, b) => timeMs(b.created_at) - timeMs(a.created_at)).slice(0, 5);
 
     setData({
@@ -847,10 +1079,11 @@ function AdminManagementPage() {
   const [showEdit, setShowEdit] = useState<Profile | null>(null);
   const [editAdmin, setEditAdmin] = useState({ full_name: "", email: "", phone: "" });
   const [newAdmin, setNewAdmin] = useState({ email: "", full_name: "", phone: "" });
+  const [confirmAdminAction, setConfirmAdminAction] = useState<null | { type: "suspend" | "remove"; admin: Profile }>(null);
   const [toast, setToast] = useState("");
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
-  const admins = profiles.filter((a) => ["admin", "super_admin"].includes(normalizeRole(a.role)));
+  const admins = profiles.filter((a) => isAdminRole(a.role));
 
   const filtered = admins.filter((a) =>
     a.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -868,6 +1101,13 @@ function AdminManagementPage() {
 
   const saveAdmin = async () => {
     if (!showEdit || !editAdmin.full_name || !editAdmin.email) return;
+    try {
+      await requireCurrentSuperAdmin();
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : "Unauthorized. Super Admin access is required.");
+      return;
+    }
+
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
@@ -886,7 +1126,6 @@ function AdminManagementPage() {
     await writeAuditLog({
       action: "Admin Profile Updated",
       action_type: "admin",
-      performed_by: "Super Admin",
       target: `${editAdmin.full_name} (${editAdmin.email})`,
       details: "Admin profile details updated.",
     });
@@ -895,6 +1134,19 @@ function AdminManagementPage() {
   };
 
   const toggleStatus = async (admin: Profile) => {
+    let currentAdmin;
+    try {
+      currentAdmin = await requireCurrentSuperAdmin();
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : "Unauthorized. Super Admin access is required.");
+      return;
+    }
+
+    if (admin.id === currentAdmin.id) {
+      notify("You cannot suspend or deactivate your own Super Admin account.");
+      return;
+    }
+
     const nextStatus = admin.status === "approved" || admin.status === "active" ? "inactive" : "approved";
     const { error: updateError } = await supabase.from("profiles").update({ approval_status: nextStatus, updated_at: new Date().toISOString() }).eq("id", admin.id);
     if (updateError) notify(updateError.message);
@@ -902,7 +1154,6 @@ function AdminManagementPage() {
       await writeAuditLog({
         action: "Admin Status Updated",
         action_type: "admin",
-        performed_by: "Super Admin",
         target: `${admin.full_name} (${admin.email})`,
         details: `Admin approval status changed to ${nextStatus}.`,
       });
@@ -910,23 +1161,76 @@ function AdminManagementPage() {
     }
   };
 
-  const deleteAdmin = async (id: string) => {
-    const { error: deleteError } = await supabase.from("profiles").delete().eq("id", id);
-    if (deleteError) notify(deleteError.message);
-    else {
-      await writeAuditLog({
-        action: "Admin Profile Deleted",
-        action_type: "admin",
-        performed_by: "Super Admin",
-        target: id,
-        details: "Admin profile row deleted from profiles.",
-      });
-      notify("Admin profile deleted.");
+  const requestAdminStatusChange = (admin: Profile) => {
+    const active = admin.status === "approved" || admin.status === "active";
+    if (active) {
+      setConfirmAdminAction({ type: "suspend", admin });
+      return;
     }
+    toggleStatus(admin);
+  };
+
+  const deleteAdmin = async (id: string) => {
+    let currentAdmin;
+    try {
+      currentAdmin = await requireCurrentSuperAdmin();
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : "Unauthorized. Super Admin access is required.");
+      return;
+    }
+
+    if (id === currentAdmin.id) {
+      notify("You cannot delete your own Super Admin account.");
+      return;
+    }
+
+    let adminProfiles: DbRow[];
+    try {
+      adminProfiles = await getAdminProfiles();
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : "Could not verify admin account count.");
+      return;
+    }
+
+    if (adminProfiles.length <= 1 || !adminProfiles.some((admin) => textValue(admin, ["id"]) !== id)) {
+      notify("Cannot delete the last remaining Admin account.");
+      return;
+    }
+
+    try {
+      await softDeleteRecord("profiles", id);
+      await writeAuditLog({
+        action: "Admin Profile Soft Deleted",
+        action_type: "admin",
+        target: id,
+        details: "Admin profile marked as deleted in profiles.",
+      });
+      notify("Admin profile moved to deleted records.");
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : "Could not remove admin profile.");
+    }
+  };
+
+  const confirmAdminActionNow = async () => {
+    if (!confirmAdminAction) return;
+    const { type, admin } = confirmAdminAction;
+    setConfirmAdminAction(null);
+    if (type === "suspend") {
+      await toggleStatus(admin);
+      return;
+    }
+    await deleteAdmin(admin.id);
   };
 
   const createAdmin = async () => {
     if (!newAdmin.email || !newAdmin.full_name) return;
+    try {
+      await requireCurrentSuperAdmin();
+    } catch (err: unknown) {
+      notify(err instanceof Error ? err.message : "Unauthorized. Super Admin access is required.");
+      return;
+    }
+
     const { data: existing, error: findError } = await supabase
       .from("profiles")
       .select("id, email, full_name")
@@ -962,7 +1266,6 @@ function AdminManagementPage() {
     await writeAuditLog({
       action: "Admin Profile Promoted",
       action_type: "admin",
-      performed_by: "Super Admin",
       target: `${newAdmin.full_name} (${newAdmin.email})`,
       details: "Existing Supabase profile promoted to admin.",
     });
@@ -1029,10 +1332,10 @@ function AdminManagementPage() {
                       <button onClick={() => openEditAdmin(a)} className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="Edit">
                         <Edit2 size={14} />
                       </button>
-                      <button onClick={() => toggleStatus(a)} className={`p-1.5 rounded hover:bg-white/5 transition-colors ${a.status === "active" || a.status === "approved" ? "text-amber-400 hover:text-amber-300" : "text-emerald-400 hover:text-emerald-300"}`} title={a.status === "active" || a.status === "approved" ? "Deactivate" : "Activate"}>
+                      <button onClick={() => requestAdminStatusChange(a)} className={`p-1.5 rounded hover:bg-white/5 transition-colors ${a.status === "active" || a.status === "approved" ? "text-amber-400 hover:text-amber-300" : "text-emerald-400 hover:text-emerald-300"}`} title={a.status === "active" || a.status === "approved" ? "Deactivate" : "Activate"}>
                         {a.status === "active" || a.status === "approved" ? <Ban size={14} /> : <UserCheck size={14} />}
                       </button>
-                      <button onClick={() => deleteAdmin(a.id)} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
+                      <button onClick={() => setConfirmAdminAction({ type: "remove", admin: a })} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -1060,6 +1363,20 @@ function AdminManagementPage() {
         </div>
       </Modal>
 
+      <ConfirmationModal
+        open={!!confirmAdminAction}
+        title={confirmAdminAction?.type === "remove" ? "Confirm Remove Admin" : "Confirm Suspend Admin"}
+        message={
+          confirmAdminAction
+            ? `${confirmAdminAction.type === "remove" ? "Remove" : "Suspend"} admin account for ${confirmAdminAction.admin.full_name} (${confirmAdminAction.admin.email})? This action will not run until you confirm.`
+            : ""
+        }
+        confirmLabel={confirmAdminAction?.type === "remove" ? "Remove Admin" : "Suspend Admin"}
+        variant="danger"
+        onCancel={() => setConfirmAdminAction(null)}
+        onConfirm={confirmAdminActionNow}
+      />
+
       {/* Edit Admin Modal */}
       <Modal open={!!showEdit} onClose={() => setShowEdit(null)} title="Edit Admin">
         {showEdit && (
@@ -1085,6 +1402,7 @@ function UserManagementPage() {
   const [tab, setTab] = useState<"passengers" | "drivers">("passengers");
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
+  const [confirmUserSuspend, setConfirmUserSuspend] = useState<Profile | null>(null);
   const [toast, setToast] = useState("");
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
@@ -1111,11 +1429,27 @@ function UserManagementPage() {
     await writeAuditLog({
       action: active ? "User Account Suspended" : "User Account Reactivated",
       action_type: "user",
-      performed_by: "Super Admin",
       target: `${user.full_name} (${user.email})`,
       details: `User approval_status changed to ${nextStatus}.`,
     });
     notify(active ? "User suspended." : "User reactivated.");
+  };
+
+  const requestUserStatusChange = (user: Profile) => {
+    const active = user.status === "active" || user.status === "approved";
+    if (active) {
+      setConfirmUserSuspend(user);
+      return;
+    }
+    toggleUserStatus(user);
+  };
+
+  const confirmUserSuspendNow = async () => {
+    if (!confirmUserSuspend) return;
+    const user = confirmUserSuspend;
+    setConfirmUserSuspend(null);
+    setSelectedUser(null);
+    await toggleUserStatus(user);
   };
 
   return (
@@ -1179,7 +1513,7 @@ function UserManagementPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => setSelectedUser(u)} className="p-1.5 rounded hover:bg-white/5 text-muted-foreground hover:text-foreground transition-colors" title="View"><Eye size={14} /></button>
-                      <button onClick={() => toggleUserStatus(u)} className="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-400 transition-colors" title={u.status === "active" || u.status === "approved" ? "Suspend" : "Reactivate"}>
+                      <button onClick={() => requestUserStatusChange(u)} className="p-1.5 rounded hover:bg-amber-500/10 text-muted-foreground hover:text-amber-400 transition-colors" title={u.status === "active" || u.status === "approved" ? "Suspend" : "Reactivate"}>
                         {u.status === "active" || u.status === "approved" ? <Ban size={14} /> : <UserCheck size={14} />}
                       </button>
                     </div>
@@ -1206,8 +1540,10 @@ function UserManagementPage() {
               <GoldButton
                 variant={selectedUser.status === "active" || selectedUser.status === "approved" ? "danger" : "primary"}
                 onClick={() => {
-                  toggleUserStatus(selectedUser);
-                  setSelectedUser(null);
+                  requestUserStatusChange(selectedUser);
+                  if (!(selectedUser.status === "active" || selectedUser.status === "approved")) {
+                    setSelectedUser(null);
+                  }
                 }}
                 className="flex-1 justify-center"
               >
@@ -1219,6 +1555,20 @@ function UserManagementPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmationModal
+        open={!!confirmUserSuspend}
+        title="Confirm Suspend User"
+        message={
+          confirmUserSuspend
+            ? `Suspend user account for ${confirmUserSuspend.full_name} (${confirmUserSuspend.email})? This action will not run until you confirm.`
+            : ""
+        }
+        confirmLabel="Suspend User"
+        variant="danger"
+        onCancel={() => setConfirmUserSuspend(null)}
+        onConfirm={confirmUserSuspendNow}
+      />
     </div>
   );
 }
@@ -1230,6 +1580,7 @@ function DriverApplicationsPage() {
   const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<DriverApp | null>(null);
+  const [confirmDriverReview, setConfirmDriverReview] = useState<null | { app: DriverApp; status: "approved" | "rejected" }>(null);
   const [toast, setToast] = useState("");
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
@@ -1246,12 +1597,22 @@ function DriverApplicationsPage() {
     await writeAuditLog({
       action: `Driver Application ${status === "approved" ? "Approved" : "Rejected"}`,
       action_type: "driver",
-      performed_by: "Super Admin",
       target: id,
       details: `Driver application approval_status changed to ${status}.`,
     });
     setSelected(null);
     notify(`Application ${status}.`);
+  };
+
+  const requestDriverReview = (app: DriverApp, status: "approved" | "rejected") => {
+    setConfirmDriverReview({ app, status });
+  };
+
+  const confirmDriverReviewNow = async () => {
+    if (!confirmDriverReview) return;
+    const { app, status } = confirmDriverReview;
+    setConfirmDriverReview(null);
+    await review(app.id, status);
   };
 
   const filtered = apps
@@ -1323,10 +1684,10 @@ function DriverApplicationsPage() {
                 </button>
                 {app.status === "pending" && (
                   <>
-                    <button onClick={() => review(app.id, "approved")} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded text-xs text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+                    <button onClick={() => requestDriverReview(app, "approved")} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded text-xs text-emerald-400 hover:bg-emerald-500/20 transition-colors">
                       <Check size={13} /> Approve
                     </button>
-                    <button onClick={() => review(app.id, "rejected")} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 hover:bg-red-500/20 transition-colors">
+                    <button onClick={() => requestDriverReview(app, "rejected")} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 hover:bg-red-500/20 transition-colors">
                       <XCircle size={13} /> Reject
                     </button>
                   </>
@@ -1352,10 +1713,10 @@ function DriverApplicationsPage() {
             </div>
             {selected.status === "pending" && (
               <div className="flex gap-2 pt-2 border-t border-border">
-                <button onClick={() => review(selected.id, "approved")} className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-sm text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+                <button onClick={() => requestDriverReview(selected, "approved")} className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-sm text-emerald-400 hover:bg-emerald-500/20 transition-colors">
                   <Check size={15} /> Approve
                 </button>
-                <button onClick={() => review(selected.id, "rejected")} className="flex-1 flex items-center justify-center gap-2 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400 hover:bg-red-500/20 transition-colors">
+                <button onClick={() => requestDriverReview(selected, "rejected")} className="flex-1 flex items-center justify-center gap-2 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400 hover:bg-red-500/20 transition-colors">
                   <XCircle size={15} /> Reject
                 </button>
               </div>
@@ -1363,6 +1724,20 @@ function DriverApplicationsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmationModal
+        open={!!confirmDriverReview}
+        title={confirmDriverReview?.status === "approved" ? "Confirm Approve Driver" : "Confirm Reject Driver"}
+        message={
+          confirmDriverReview
+            ? `${confirmDriverReview.status === "approved" ? "Approve" : "Reject"} driver application for ${confirmDriverReview.app.name}? This action will not run until you confirm.`
+            : ""
+        }
+        confirmLabel={confirmDriverReview?.status === "approved" ? "Approve Driver" : "Reject Driver"}
+        variant={confirmDriverReview?.status === "approved" ? "primary" : "danger"}
+        onCancel={() => setConfirmDriverReview(null)}
+        onConfirm={confirmDriverReviewNow}
+      />
     </div>
   );
 }
@@ -1524,7 +1899,6 @@ function FareSettingsPage() {
     await writeAuditLog({
       action: "Fare Settings Updated",
       action_type: "fare",
-      performed_by: "Super Admin",
       target: "Fare Settings",
       details: `Solo base ${payload.solo_base_fare}, per km ${payload.solo_per_km}, group base ${payload.group_base_fare}, surge ${payload.surge_multiplier}.`,
     });
@@ -1726,8 +2100,36 @@ function AuditLogsPage() {
 // ─── System Settings Page ─────────────────────────────────────────────────────
 
 function SystemSettingsPage() {
+  const { data: deletedRecords, loading, error, reload } = useDeletedRecords();
+  const [restoreToast, setRestoreToast] = useState("");
+
+  const notifyRestore = (msg: string) => { setRestoreToast(msg); setTimeout(() => setRestoreToast(""), 3000); };
+
+  const restoreRecord = async (record: DeletedRecord) => {
+    try {
+      await restoreSoftDeletedRecord(record.table, record.id);
+      await writeAuditLog({
+        action: "Soft Deleted Record Restored",
+        action_type: "system",
+        target: `${record.table}:${record.id}`,
+        details: `${record.label} restored from deleted records.`,
+      });
+      notifyRestore("Record restored.");
+      await reload();
+    } catch (err: unknown) {
+      notifyRestore(err instanceof Error ? err.message : "Could not restore record.");
+    }
+  };
+
   return (
     <div className="space-y-5 max-w-2xl">
+      {restoreToast && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 bg-[#1E0808] border border-[#C9952A]/40 rounded-lg text-sm text-foreground shadow-xl">
+          <CheckCircle2 size={15} className="text-[#C9952A]" />
+          {restoreToast}
+        </div>
+      )}
+
       {/* Database */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="px-5 py-4 border-b border-border bg-[#1A0707]">
@@ -1764,6 +2166,39 @@ function SystemSettingsPage() {
             </div>
             <Badge variant="info">Vercel</Badge>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-[#1A0707]">
+          <div>
+            <h3 className="font-['Crimson_Pro'] text-lg text-foreground">Deleted Records</h3>
+            <p className="text-xs text-muted-foreground">Recover soft-deleted profiles, drivers, bookings, and ratings</p>
+          </div>
+          <GoldButton variant="outline" className="text-xs py-1.5" onClick={reload}><RefreshCw size={13} />Refresh</GoldButton>
+        </div>
+        <div className="divide-y divide-border">
+          {loading ? (
+            <LoadingState message="Loading deleted records..." />
+          ) : error ? (
+            <ErrorState message={error} onRetry={reload} />
+          ) : deletedRecords.length === 0 ? (
+            <EmptyState message="No deleted records found" />
+          ) : deletedRecords.map((record) => (
+            <div key={`${record.table}-${record.id}`} className="flex items-center justify-between gap-3 px-5 py-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Badge variant="muted">{record.table}</Badge>
+                  <p className="text-sm text-foreground truncate">{record.label}</p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Deleted: <span className="font-mono">{record.deleted_at}</span></p>
+              </div>
+              <GoldButton variant="outline" className="text-xs py-1.5 flex-shrink-0" onClick={() => restoreRecord(record)}>
+                <RefreshCw size={13} />
+                Restore
+              </GoldButton>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -1862,6 +2297,22 @@ export default function App() {
     setAdminName("Super Admin");
   }, []);
 
+  const handleNavigate = useCallback(async (nextPage: Page) => {
+    if (!highLevelPages.has(nextPage)) {
+      setPage(nextPage);
+      return;
+    }
+
+    try {
+      await requireCurrentSuperAdmin();
+      setPage(nextPage);
+    } catch {
+      if (!isDemoMode) await supabase.auth.signOut();
+      setAuthState("unauthorized");
+      setPage("unauthorized");
+    }
+  }, []);
+
   if (authState === "loading") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -1903,7 +2354,7 @@ export default function App() {
   return (
     <Layout
       currentPage={page}
-      onNavigate={setPage}
+      onNavigate={handleNavigate}
       onLogout={handleLogout}
       adminName={adminName}
     >
