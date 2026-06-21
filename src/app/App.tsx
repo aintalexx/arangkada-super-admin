@@ -846,7 +846,14 @@ function Layout({ children, currentPage, onNavigate, onLogout, adminName }: {
           >
             <Menu size={18} />
           </button>
-          <h2 className="font-['Crimson_Pro'] text-xl text-foreground flex-1">{title}</h2>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground leading-none mb-1">
+              <span className="truncate">Super Admin</span>
+              <ChevronRight size={12} className="text-[#C9952A]/70 flex-shrink-0" />
+              <span className="text-[#C9952A] truncate">{title}</span>
+            </div>
+            <h2 className="font-['Crimson_Pro'] text-xl text-foreground truncate">{title}</h2>
+          </div>
           {isDemoMode && (
             <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/25 rounded-full text-xs text-amber-400 font-mono">
               <Activity size={12} />
