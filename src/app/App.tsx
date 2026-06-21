@@ -1108,7 +1108,7 @@ function AdminManagementPage() {
       return;
     }
 
-    const { error: updateError } = await supabase
+    const { data: updatedAdmin, error: updateError } = await supabase
       .from("profiles")
       .update({
         full_name: editAdmin.full_name,
@@ -1116,10 +1116,17 @@ function AdminManagementPage() {
         phone: editAdmin.phone,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", showEdit.id);
+      .eq("id", showEdit.id)
+      .select("id")
+      .maybeSingle();
 
     if (updateError) {
       notify(updateError.message);
+      return;
+    }
+
+    if (!updatedAdmin?.id) {
+      notify("Admin profile was not updated. Check Supabase RLS policy for super_admin profile updates.");
       return;
     }
 
@@ -1130,6 +1137,7 @@ function AdminManagementPage() {
       details: "Admin profile details updated.",
     });
     setShowEdit(null);
+    await reload();
     notify("Admin updated.");
   };
 
