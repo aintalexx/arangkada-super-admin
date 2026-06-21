@@ -220,6 +220,7 @@ function ConfirmationModal({
   return (
     <Modal open={open} onClose={onCancel} title={title}>
       <div className="space-y-4">
+        <SuperAdminWarning />
         <div className="flex gap-3 p-3 rounded-lg border border-border bg-[#1E0808]">
           <AlertTriangle size={18} className={variant === "danger" ? "text-red-400 flex-shrink-0 mt-0.5" : "text-[#C9952A] flex-shrink-0 mt-0.5"} />
           <p className="text-sm text-foreground leading-relaxed">{message}</p>
@@ -236,6 +237,15 @@ function ConfirmationModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function SuperAdminWarning({ message = "Super Admin-only action. Proceed with caution." }: { message?: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-950/20 px-3 py-2 text-xs text-red-300">
+      <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+      <span>{message}</span>
+    </div>
   );
 }
 
@@ -1302,10 +1312,13 @@ function AdminManagementPage() {
         <div className="w-full sm:w-72">
           <SearchBar value={search} onChange={setSearch} placeholder="Search admins..." />
         </div>
-        <GoldButton onClick={() => setShowCreate(true)}>
-          <UserPlus size={15} />
-          Create Admin
-        </GoldButton>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <SuperAdminWarning message="Admin account changes affect system access. Proceed with caution." />
+          <GoldButton onClick={() => setShowCreate(true)}>
+            <UserPlus size={15} />
+            Create Admin
+          </GoldButton>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -1365,6 +1378,7 @@ function AdminManagementPage() {
       {/* Create Admin Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Admin Account">
         <div className="space-y-4">
+          <SuperAdminWarning message="This promotes an existing account to Admin access. Proceed with caution." />
             <Input label="Full Name" value={newAdmin.full_name} onChange={(e) => setNewAdmin({ ...newAdmin, full_name: e.target.value })} placeholder="Full name" />
             <Input label="Email Address" type="email" value={newAdmin.email} onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })} placeholder="Email address" />
             <Input label="Phone Number" value={newAdmin.phone} onChange={(e) => setNewAdmin({ ...newAdmin, phone: e.target.value })} placeholder="Phone number" />
@@ -1396,6 +1410,7 @@ function AdminManagementPage() {
       <Modal open={!!showEdit} onClose={() => setShowEdit(null)} title="Edit Admin">
         {showEdit && (
           <div className="space-y-4">
+            <SuperAdminWarning message="Editing an admin profile changes privileged account details. Proceed with caution." />
             <Input label="Full Name" value={editAdmin.full_name} onChange={(e) => setEditAdmin({ ...editAdmin, full_name: e.target.value })} />
             <Input label="Email" value={editAdmin.email} onChange={(e) => setEditAdmin({ ...editAdmin, email: e.target.value })} />
             <Input label="Phone" value={editAdmin.phone} onChange={(e) => setEditAdmin({ ...editAdmin, phone: e.target.value })} />
@@ -2012,10 +2027,13 @@ function FareSettingsPage() {
           <p>Last updated: <span className="text-foreground font-mono">{fares.updated_at}</span></p>
           <p>Updated by: <span className="text-foreground">{fares.updated_by}</span></p>
         </div>
-        <GoldButton onClick={save} disabled={loading || tableMissing}>
-          <Check size={15} />
-          Save Fare Settings
-        </GoldButton>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <SuperAdminWarning message="Fare changes affect all future bookings. Proceed with caution." />
+          <GoldButton onClick={save} disabled={loading || tableMissing}>
+            <Check size={15} />
+            Save Fare Settings
+          </GoldButton>
+        </div>
       </div>
     </div>
   );
@@ -2191,6 +2209,9 @@ function SystemSettingsPage() {
             <p className="text-xs text-muted-foreground">Recover soft-deleted profiles, drivers, bookings, and ratings</p>
           </div>
           <GoldButton variant="outline" className="text-xs py-1.5" onClick={reload}><RefreshCw size={13} />Refresh</GoldButton>
+        </div>
+        <div className="px-5 py-3 border-b border-border">
+          <SuperAdminWarning message="Restoring deleted records can re-enable hidden system data. Proceed with caution." />
         </div>
         <div className="divide-y divide-border">
           {loading ? (
